@@ -38,6 +38,7 @@
 import { emit, type Handlers, respond } from "./lib/answer.ts";
 import { Bd, binary, SEAM } from "./lib/bd.ts";
 import { reads } from "./verbs/reads.ts";
+import { writes } from "./verbs/writes.ts";
 
 /** The bd every verb runs, resolved when the first verb that runs one asks. */
 function open(root: string): Bd {
@@ -46,11 +47,11 @@ function open(root: string): Bd {
 
 /**
  * Every verb this pack answers. A verb of the contract not named here —
- * fleet-rsia.3's create, update, append and close, and .4's order.set,
- * order.withdraw, run.set, hold.raise, hold.clear, holds.open, export and
- * scratch — answers usage, exit 2, until its file lands.
+ * fleet-rsia.4's order.set, order.withdraw, run.set, hold.raise, hold.clear,
+ * holds.open, export and scratch — answers usage, exit 2, until its file
+ * lands.
  */
-export const HANDLERS: Handlers = { ...reads(open) };
+export const HANDLERS: Handlers = { ...reads(open), ...writes(open) };
 
 if (import.meta.main) {
   const stdin = await new Response(Deno.stdin.readable).text();

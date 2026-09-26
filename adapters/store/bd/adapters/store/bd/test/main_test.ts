@@ -7,6 +7,8 @@
 // fleet-rsia.5's CI pins bd 1.3.0 and runs these.
 
 import { assert, assertEquals } from "@std/assert";
+import { CONTRACT } from "../lib/answer.ts";
+import { HANDLERS } from "../main.ts";
 
 const MAIN = new URL("../main.ts", import.meta.url).pathname;
 const SEAT = "0199a3c4-7d8e-7f90-a1b2-c3d4e5f60718";
@@ -347,16 +349,509 @@ Deno.test({
         },
       );
 
-      await t.step(
-        "a verb not built yet is usage, and nothing is written",
-        async () => {
-          const { exit, answer, stderr } = await call("create", {
-            root,
-            item: { title: "t", description: "", type: "task", labels: [] },
-            by: "run:main-test",
-          });
+      // The first verb of the contract this pack does not answer yet, while
+      // one is left: fleet-rsia.3 built `create`, which this step first asked.
+      const unbuilt = Object.keys(CONTRACT.verbs).find((verb) =>
+        !(verb in HANDLERS)
+      );
+      await t.step({
+        name: "a verb not built yet is usage, and nothing is written",
+        ignore: unbuilt === undefined,
+        async fn() {
+          const { exit, answer, stderr } = await call(unbuilt!, { root });
           assertEquals([exit, answer], [2, undefined]);
-          assertEquals(stderr, "the bd pack does not answer `create` yet");
+          assertEquals(
+            stderr,
+            `the bd pack does not answer \`${unbuilt}\` yet`,
+          );
+        },
+      });
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+/**
+ * The plain writes over a real bd board, each step naming the conformance
+ * check (core/src/store/conformance.rs at tinyfleet 7fadcde) whose assertions
+ * it takes: `fleet store check` runs them only once fleet-rsia.4's scratch
+ * lands, so these are the writes' proof until it does. The withdrawals in
+ * checks 22 and 25 are fleet-rsia.4's `order.withdraw`, and left to it.
+ */
+Deno.test({
+  name: "main.ts answers the plain writes over a real bd board",
+  ignore: !HAS_BD,
+  async fn(t) {
+    const dir = await Deno.makeTempDir({ prefix: "bd-pack-writes-" });
+    const root = dir;
+    const BY = "run:fleet-conformance";
+    const NOBODY = "fleet-conformance-nobody-filed-this";
+    const OTHER = "0199a3c4-7d8e-7f90-a1b2-c3d4e5f60719";
+    const THIRD = "0199a3c4-7d8e-7f90-a1b2-c3d4e5f6071a";
+    try {
+      const init = await runs(
+        "bd",
+        ["init", "--prefix", "fx", "--quiet"],
+        root,
+      );
+      assert(init.ok, init.stderr);
+
+      type Shown = {
+        id: string;
+        title: string;
+        description: string;
+        status: string;
+        type: string;
+        labels: string[];
+        assignee: string | null;
+        order: { state: string };
+        run: unknown;
+      };
+      const show = async (id: string): Promise<Shown> => {
+        const shown = await call("show", { root, id });
+        assertEquals(shown.exit, 0, shown.stderr);
+        return shown.answer?.item as Shown;
+      };
+      const create = async (title: string, more: object = {}) => {
+        const made = await call("create", {
+          root,
+          item: {
+            title,
+            description: "an item the conformance suite filed",
+            type: "task",
+            labels: ["fleet-conformance"],
+            ...more,
+          },
+          by: BY,
+        });
+        assertEquals(made.exit, 0, made.stderr);
+        return made.answer?.id as string;
+      };
+      const update = (id: string, change: object) =>
+        call("update", { root, id, by: BY, ...change });
+      const took = async (id: string, change: object) => {
+        const done = await update(id, change);
+        assertEquals(
+          [done.exit, done.answer],
+          [0, { schema_version: 1 }],
+          done.stderr,
+        );
+      };
+      /** A fenced write the item did not meet: exit 1, moved, naming each of `names`. */
+      const moved = async (id: string, change: object, names: string[]) => {
+        const { exit, answer, stderr } = await update(id, change);
+        assertEquals(exit, 1, stderr);
+        const refused = answer?.refused as { reason: string; message: string };
+        assertEquals(refused.reason, "moved");
+        for (const name of names) {
+          assert(refused.message.includes(name), `${name}: ${refused.message}`);
+        }
+        assertEquals(stderr.split("\n").at(-1), refused.message);
+      };
+      const reason = (answer: Called) =>
+        (answer.answer?.refused as { reason: string } | undefined)?.reason;
+      const closeBy = (id: string, by: string, why = "closed by main_test") =>
+        call("close", { root, id, by, reason: why });
+      const count = async () =>
+        (await bd(root, "list", "--all", "-n", "0") as unknown[]).length;
+
+      await t.step(
+        "create then show (check 4): the item filed reads back whole",
+        async () => {
+          const id = await create("an item to read back", {
+            labels: ["fleet-conformance", "a,b"],
+            priority: 1,
+          });
+          const item = await show(id);
+          assertEquals(item.id, id);
+          assertEquals(
+            [item.title, item.description, item.status, item.type],
+            [
+              "an item to read back",
+              "an item the conformance suite filed",
+              "open",
+              "task",
+            ],
+          );
+          assertEquals(item.labels.toSorted(), ["a,b", "fleet-conformance"]);
+          assertEquals([item.assignee, item.order, item.run], [null, {
+            state: "none",
+          }, null]);
+          const row =
+            (await bd(root, "show", id) as Record<string, unknown>[])[0];
+          assertEquals(
+            [row.priority, row.created_by],
+            [1, BY],
+            "--priority and --actor were sent",
+          );
+        },
+      );
+
+      await t.step(
+        "create refuses priority 5 before anything is sent",
+        async () => {
+          const before = await count();
+          const refused = await call("create", {
+            root,
+            item: {
+              title: "too urgent",
+              description: "",
+              type: "task",
+              priority: 5,
+            },
+            by: BY,
+          });
+          assertEquals([refused.exit, refused.answer], [2, undefined]);
+          assert(
+            refused.stderr.includes("priority is 5, above 4"),
+            refused.stderr,
+          );
+          assertEquals(await count(), before, "nothing was filed");
+        },
+      );
+
+      await t.step(
+        "missing is refused (check 6): a write to an id no item carries answers missing",
+        async () => {
+          const entry = {
+            "fleet.entry": 1,
+            kind: "ordered",
+            order: "dispatch",
+          };
+          for (
+            const [verb, request] of [
+              ["update", { title: "a title for nobody" }],
+              ["update", { title: "a title for nobody", if_assignee: null }],
+              ["update", { assignee: SEAT, if_assignee: OTHER }],
+              ["append", { entry }],
+              ["close", { reason: "r" }],
+            ] as const
+          ) {
+            const answer = await call(verb, {
+              root,
+              id: NOBODY,
+              by: BY,
+              ...request,
+            });
+            assertEquals(
+              [answer.exit, reason(answer)],
+              [1, "missing"],
+              `${verb} ${answer.stderr}`,
+            );
+          }
+        },
+      );
+
+      await t.step(
+        "update (check 12): a title, an assignee, both in one call, and nobody",
+        async () => {
+          const id = await create("the title it was filed under");
+          await took(id, { title: "the title it carries now" });
+          let now = await show(id);
+          assertEquals([now.title, now.assignee], [
+            "the title it carries now",
+            null,
+          ]);
+          await took(id, { assignee: SEAT });
+          now = await show(id);
+          assertEquals([now.title, now.assignee], [
+            "the title it carries now",
+            SEAT,
+          ]);
+          await took(id, {
+            title: "the title and the holder both moved",
+            assignee: OTHER,
+          });
+          now = await show(id);
+          assertEquals([now.title, now.assignee], [
+            "the title and the holder both moved",
+            OTHER,
+          ]);
+          await took(id, { assignee: null });
+          now = await show(id);
+          assertEquals([now.title, now.assignee], [
+            "the title and the holder both moved",
+            null,
+          ]);
+        },
+      );
+
+      await t.step(
+        "update naming nothing (check 21): usage, exit 2, and nothing is written",
+        async () => {
+          const id = await create("an item an empty update reaches");
+          await took(id, { assignee: SEAT });
+          for (const change of [{}, { title: null }, { if_assignee: SEAT }]) {
+            const answer = await update(id, change);
+            assertEquals(
+              [answer.exit, answer.answer],
+              [2, undefined],
+              JSON.stringify(change),
+            );
+            assertEquals(
+              answer.stderr,
+              "an update names no title, assignee or status — nothing was written",
+            );
+          }
+          const now = await show(id);
+          assertEquals([now.title, now.assignee], [
+            "an item an empty update reaches",
+            SEAT,
+          ]);
+        },
+      );
+
+      await t.step(
+        "fenced update refuses moved (check 23): a missed fence writes nothing",
+        async () => {
+          const title = "an item a fenced update reaches";
+          const id = await create(title);
+          await took(id, { assignee: SEAT, if_assignee: null });
+          assertEquals(
+            (await show(id)).assignee,
+            SEAT,
+            "fenced on nobody, on an item never held",
+          );
+          for (const fence of [OTHER, null]) {
+            await moved(
+              id,
+              {
+                title: "a title nothing writes",
+                assignee: OTHER,
+                if_assignee: fence,
+              },
+              [id, SEAT],
+            );
+            const now = await show(id);
+            assertEquals(
+              [now.title, now.assignee],
+              [title, SEAT],
+              `fenced on ${fence}`,
+            );
+          }
+          await took(id, {
+            title: "the title its holder's fence let through",
+            if_assignee: SEAT,
+          });
+          let now = await show(id);
+          assertEquals(
+            [now.title, now.assignee],
+            ["the title its holder's fence let through", SEAT],
+          );
+          await took(id, { assignee: null, if_assignee: SEAT });
+          assertEquals((await show(id)).assignee, null);
+          await took(id, { assignee: OTHER, if_assignee: null });
+          now = await show(id);
+          assertEquals(
+            now.assignee,
+            OTHER,
+            "fenced on nobody, on an item whose holder was cleared",
+          );
+        },
+      );
+
+      await t.step(
+        "fenced writes (check 22): a reopen, and hand-overs fenced on the holder read",
+        async () => {
+          const id = await create("an item a fenced write reaches");
+          await took(id, { assignee: SEAT });
+          const closed = await closeBy(
+            id,
+            `seat:${SEAT}`,
+            "landed by its seat",
+          );
+          assertEquals(closed.exit, 0, closed.stderr);
+          await took(id, { status: "open" });
+          let now = await show(id);
+          assertEquals(
+            [now.status, now.assignee],
+            ["open", SEAT],
+            "a reopen, from a non-holder",
+          );
+          await took(id, { assignee: null, if_assignee: SEAT });
+          await moved(id, { assignee: OTHER, if_assignee: SEAT }, [id]);
+          assertEquals(
+            (await show(id)).assignee,
+            null,
+            "a hand-over that was moved",
+          );
+          await took(id, { assignee: OTHER, if_assignee: null });
+          await took(id, { assignee: THIRD, if_assignee: OTHER });
+          now = await show(id);
+          assertEquals(now.assignee, THIRD, "the holder after two hand-overs");
+        },
+      );
+
+      await t.step(
+        "reopen through update (check 24): fenced on its holder, open and held by nobody",
+        async () => {
+          const id = await create("an item an update reopens");
+          await took(id, { assignee: SEAT });
+          assertEquals((await closeBy(id, `seat:${SEAT}`)).exit, 0);
+          const untouched = async (after: string) => {
+            const now = await show(id);
+            assertEquals([now.assignee, now.status], [SEAT, "closed"], after);
+          };
+          await moved(
+            id,
+            { assignee: null, status: "open", if_assignee: null },
+            [id, SEAT],
+          );
+          await untouched("a reopen fenced on nobody");
+          const usage = await update(id, {
+            status: "in_progress",
+            if_assignee: SEAT,
+          });
+          assertEquals([usage.exit, usage.answer], [2, undefined]);
+          await untouched("an update to in_progress");
+          await took(id, { assignee: null, status: "open", if_assignee: SEAT });
+          const now = await show(id);
+          assertEquals([now.status, now.assignee], ["open", null]);
+          const ready = await call("list", { root, filter: "ready" });
+          assert(
+            (ready.answer?.items as { id: string }[]).some((row) =>
+              row.id === id
+            ),
+            `${id} is back in the ready set`,
+          );
+        },
+      );
+
+      await t.step(
+        "a non-holder moves an in_progress item's holder only through the fence",
+        async () => {
+          const id = await create("an item its seat is working");
+          await took(id, { assignee: SEAT });
+          await bd(
+            root,
+            "update",
+            id,
+            "--status",
+            "in_progress",
+            "--actor",
+            SEAT,
+          );
+          const plain = await update(id, { assignee: OTHER });
+          assertEquals(plain.exit, 3);
+          assert(
+            String(plain.answer?.error).includes(`cannot reassign ${id}`),
+            plain.stderr,
+          );
+          assertEquals((await show(id)).assignee, SEAT);
+          await took(id, { assignee: OTHER, if_assignee: SEAT });
+          assertEquals((await show(id)).assignee, OTHER);
+          await took(id, { status: "open" });
+          const now = await show(id);
+          assertEquals(
+            [now.status, now.assignee],
+            ["open", OTHER],
+            "the status is not the holder's alone",
+          );
+        },
+      );
+
+      await t.step(
+        "timeline is append-only and ordered (check 16): append answers each comment's id",
+        async () => {
+          const id = await create("an item with a timeline");
+          const empty = await call("timeline", { root, id });
+          assertEquals([empty.exit, empty.answer?.entries], [0, []]);
+          const bodies = [
+            { kind: "ordered", order: "dispatch", seat: SEAT },
+            { kind: "order_withdrawn", why: "retire", seat: SEAT, cause: null },
+            {
+              kind: "delivered",
+              commit: "1111111111111111111111111111111111111111",
+              branch: "work/fleet-conformance",
+              base: "0123456789abcdef0123456789abcdef01234567",
+              files: ["core/src/store/conformance.rs"],
+              checks: [],
+              suite: { command: "fleet store check", rc: 0 },
+              spec_corrections: [],
+              not_proven: [{
+                surface: "a store under load",
+                command: "fleet store check",
+              }],
+              decisions: [],
+              covers: [],
+            },
+          ];
+          const sent: string[] = [];
+          for (const body of bodies) {
+            const appended = await call("append", {
+              root,
+              id,
+              by: `seat:${SEAT}`,
+              entry: { ...body, "fleet.entry": 1 },
+            });
+            assertEquals(appended.exit, 0, appended.stderr);
+            sent.push(appended.answer?.entry as string);
+          }
+          assertEquals(
+            new Set(sent).size,
+            3,
+            `each entry has an id of its own: ${sent}`,
+          );
+          const comments = await bd(root, "comments", id) as { id: string }[];
+          assertEquals(
+            comments.map((comment) => comment.id),
+            sent,
+            "the ids are bd's comments'",
+          );
+          const { exit, answer } = await call("timeline", { root, id });
+          assertEquals(exit, 0);
+          const entries = answer?.entries as Record<string, unknown>[];
+          assertEquals(entries.map((entry) => entry.id), sent);
+          for (const [n, entry] of entries.entries()) {
+            const { id: _, at, by, ...body } = entry;
+            assertEquals(body, bodies[n]);
+            assertEquals(by, `seat:${SEAT}`);
+            assert(
+              typeof at === "string" && at !== "",
+              `entry ${n} carries a time`,
+            );
+          }
+          const absent = await call("timeline", { root, id: NOBODY });
+          assertEquals([absent.exit, reason(absent)], [1, "missing"]);
+        },
+      );
+
+      await t.step(
+        "close (check 18): a second close answers already, and writes nothing",
+        async () => {
+          const id = await create("an item to close");
+          assertEquals((await show(id)).status, "open");
+          const first = await closeBy(id, BY, "the first close's reason");
+          assertEquals(
+            [first.exit, first.answer],
+            [0, { schema_version: 1 }],
+            first.stderr,
+          );
+          assertEquals((await show(id)).status, "closed");
+          const second = await closeBy(id, BY, "the second close's reason");
+          assertEquals([second.exit, reason(second)], [1, "already"]);
+          assert(
+            (second.answer?.refused as { message: string }).message.includes(
+              id,
+            ),
+            second.stderr,
+          );
+          assertEquals((await show(id)).status, "closed");
+          const row =
+            (await bd(root, "show", id) as Record<string, unknown>[])[0];
+          assertEquals(row.close_reason, "the first close's reason");
+        },
+      );
+
+      await t.step(
+        "a seat closes an item it holds, as its bare id (fleet-pjl)",
+        async () => {
+          const id = await create("an item its seat lands");
+          await took(id, { assignee: SEAT });
+          const closed = await closeBy(id, `seat:${SEAT}`);
+          assertEquals(closed.exit, 0, closed.stderr);
+          assertEquals((await show(id)).status, "closed");
         },
       );
     } finally {
