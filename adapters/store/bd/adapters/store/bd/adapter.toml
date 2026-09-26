@@ -1,0 +1,6 @@
+[adapter]
+name = "bd"
+kind = "store"
+version = "0.1.0"
+description = "bd 1.3.0 behind the store contract: one Deno process per call, each bd call made under -C <root> with the JSON envelope."
+entry = "main.ts"
