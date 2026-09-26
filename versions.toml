@@ -1,0 +1,19 @@
+# The fleet these packs are checked against: CI builds fleet from this source
+# at this commit, and every check under ci/ runs against that binary.
+#
+# A FULL SHA AND NOT A TAG: fleet has published no tag yet, so the pin is the
+# commit itself, on fleet's public repository (release/0.1.0 carries it).
+# `fleet --version` prints the crate version and no commit, so the binary
+# cannot say which commit it was built from; this line is the record. When
+# fleet tags a release, the pin becomes that tag's commit, and when fleet
+# publishes release binaries, CI downloads the one for this commit instead of
+# building it.
+#
+# MOVING THE PIN IS A COMMIT: this line, and whatever the checks then say.
+#
+# The other pins are not repeated here, each is read where it lives: Deno's
+# from runtimes/ts/pack.toml's [runtime] table, and bd's from the PINNED line
+# of adapters/store/bd/doctor/bd-version/run.sh (ci/pins.sh reads all three).
+[fleet]
+source = "https://github.com/bembot90/tinyfleet"
+commit = "7fadcdeead2f1a9cc863984c833d2b1094459bf5"

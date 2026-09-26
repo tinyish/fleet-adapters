@@ -1,0 +1,106 @@
+# The packs' checks, on every push and pull request, against the fleet
+# versions.toml pins. Each check is a script under ci/ that a person runs the
+# same way (README.md, "The checks"); this file installs the pins and calls
+# them, one step per check so a red step names what went red.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # bd 1.3.0 sends anonymous usage metrics unless this is set (`bd metrics`
+  # reads it and answers OFF).
+  DO_NOT_TRACK: "1"
+
+jobs:
+  packs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out fleet-packs
+        uses: actions/checkout@v7
+        with:
+          path: fleet-packs
+
+      # Every version below is read where it is pinned: fleet's commit from
+      # versions.toml, Deno's from runtimes/ts/pack.toml, bd's from the bd
+      # pack's doctor check.
+      - name: Read the pins
+        id: pins
+        run: |
+          pins=$(sh fleet-packs/ci/pins.sh)
+          echo "$pins" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Install Deno ${{ steps.pins.outputs.deno }}
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ steps.pins.outputs.deno }}
+
+      - name: Install bd ${{ steps.pins.outputs.bd }}
+        run: |
+          sh fleet-packs/ci/install-bd.sh "${{ steps.pins.outputs.bd }}" "$RUNNER_TEMP/bd"
+          echo "$RUNNER_TEMP/bd" >> "$GITHUB_PATH"
+
+      # The source at the pinned commit, which check-ts.sh reads as
+      # FLEET_SOURCE and the build below compiles.
+      - name: Fetch fleet at ${{ steps.pins.outputs.fleet_commit }}
+        run: |
+          git init --quiet fleet
+          git -C fleet fetch --quiet --depth 1 "${{ steps.pins.outputs.fleet_source }}" "${{ steps.pins.outputs.fleet_commit }}"
+          git -C fleet checkout --quiet FETCH_HEAD
+          test "$(git -C fleet rev-parse HEAD)" = "${{ steps.pins.outputs.fleet_commit }}"
+
+      - name: Restore the fleet binary
+        id: fleet-cache
+        uses: actions/cache@v6
+        with:
+          path: fleet-bin
+          key: fleet-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.fleet_commit }}
+
+      - name: Install Rust
+        if: steps.fleet-cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build fleet
+        if: steps.fleet-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo build --release --locked -p fleet-cli --manifest-path fleet/Cargo.toml
+          mkdir -p fleet-bin
+          cp fleet/target/release/fleet fleet-bin/fleet
+
+      - name: Name the fleet the checks run against
+        run: |
+          echo "FLEET_BIN=$GITHUB_WORKSPACE/fleet-bin/fleet" >> "$GITHUB_ENV"
+          echo "FLEET_SOURCE=$GITHUB_WORKSPACE/fleet" >> "$GITHUB_ENV"
+
+      - name: ci/ formatted and linted
+        working-directory: fleet-packs
+        run: |
+          deno fmt --check ci .github README.md adapters/store/README.md
+          deno lint ci
+
+      - name: "bd: the pins hold"
+        run: sh fleet-packs/ci/check-bd.sh pins
+      - name: "bd: deno fmt --check"
+        run: sh fleet-packs/ci/check-bd.sh fmt
+      - name: "bd: deno lint"
+        run: sh fleet-packs/ci/check-bd.sh lint
+      - name: "bd: deno test"
+        run: sh fleet-packs/ci/check-bd.sh test
+      - name: "bd: deno task types, and git diff"
+        run: sh fleet-packs/ci/check-bd.sh types
+      - name: "bd: fleet pack check"
+        run: sh fleet-packs/ci/check-bd.sh pack-check
+      - name: "bd: fleet store check"
+        run: sh fleet-packs/ci/check-bd.sh store-check
+      - name: "bd: the smoke ring and the doctor check"
+        run: sh fleet-packs/ci/check-bd.sh smoke
+
+      - name: "tiny: ci/check-tiny.sh"
+        run: sh fleet-packs/ci/check-tiny.sh
+      - name: "ts: ci/check-ts.sh"
+        run: sh fleet-packs/ci/check-ts.sh

@@ -30,9 +30,10 @@ import { CouldNotTell, Refused } from "./answer.ts";
 export const BD = "bd";
 
 /**
- * The bd release this pack is measured against. A pin move is this line plus
- * the re-measure: every claim in lib/ re-run on the new release, and the
- * fixtures re-recorded.
+ * The bd release this pack is measured against. A pin move is this line, the
+ * PINNED line of the pack's doctor/bd-version/run.sh (test/doctor_test.ts
+ * holds the two equal), and the re-measure: every claim in lib/ re-run on
+ * the new release, and the fixtures re-recorded.
  */
 export const PINNED = "1.3.0";
 

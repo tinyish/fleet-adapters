@@ -1,0 +1,21 @@
+description = "Whether the bd this pack's adapter runs is the release the adapter was measured against."
+run = "run.sh"
+
+# No name key: the directory is the name, which is the shape the reference's
+# packs use.
+#
+# THE PIN IS THIS PACK'S: every "measured on" claim in the adapter beside it
+# (adapters/store/bd/, lib/bd.ts's PINNED) was taken on that one release, so
+# the pin moves with the adapter, in one commit of this repository, and never
+# with the fleet binary. fleet doctor finds this entry through the installed
+# packs like any pack's check: it resolves doctor/bd-version/ per file, the
+# highest layer first, so while the binary's defaults still carry a check of
+# the same name this one replaces it, and the row names this pack as its
+# layer.
+#
+# What it is for: the adapter reaches the work graph through bd and nothing
+# else, and reads its answers by shapes measured on the pinned release — the
+# row caps, the envelope, the stderr an ambiguous id is told by, the exit a
+# fence miss gives. A bd at another version still runs every verb, and this
+# entry is where a person is told the shapes those verbs read were not
+# measured on it, pointed at beads' own installation docs for the pin.
