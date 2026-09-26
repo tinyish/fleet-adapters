@@ -17,9 +17,9 @@ The pack is `adapters/agent/claude-code/` in this repository, and the paths
 below are the pack's. This file sits in the adapter's own directory because a
 pack's top level holds `pack.toml` and the eight slots and nothing else.
 
-**Status:** this is the pack's skeleton. It answers `capabilities`. `version`,
-`launch`, `resume`, `read` and `context` answer exit 2, usage, naming the verb,
-until the rows that fill them land.
+**Status:** the pack answers `capabilities` and `context`. `version`, `launch`,
+`resume` and `read` answer exit 2, usage, naming the verb, until the rows that
+fill them land.
 
 ## What it needs
 
@@ -80,6 +80,54 @@ deno run --no-config --no-prompt --quiet --allow-run=<claude> --allow-read --all
 | `--no-prompt`                                         | A permission the grant lacks is refused, never asked for on a terminal.                                                                                                                                                                                                                                                                                                                                           |
 | `--quiet`                                             | Deno's own notes stay off stderr, whose last line is for people: without it, `--allow-run=claude` with no `claude` on `PATH` prints a note on every call.                                                                                                                                                                                                                                                         |
 
+## What `context` answers
+
+`context` reads each seat's transcript, the file Claude Code writes the session
+to, and runs no claude. The file is
+`<config dir>/projects/<worktree>/<session id>.jsonl`, where `<worktree>` is the
+seat's worktree with every character that is not a letter or a digit replaced by
+`-`, and the config dir is the seat's `config_dir`, or for a seat without one,
+`CLAUDE_CONFIG_DIR`, else `~/.claude`. Each seat answers:
+
+- `tokens`: the input tokens and both cache figures of the last assistant entry
+  on the session's own chain whose sum is not zero. A subagent's entries and an
+  entry Claude Code wrote for a turn that made no model call are skipped.
+- `turns`: the model responses on the session's own chain, the zero-usage ones
+  included. Claude Code 2.1.280 writes one response as an entry per content
+  block, all under one message id, and those count once.
+- `last_write`: the transcript's modification time, to the second, in UTC.
+- `window` is never answered: the transcript does not state it.
+
+A seat with no `session_id`, or whose transcript is not there or cannot be read,
+answers its `seat` alone. So does a worktree with a character outside ASCII,
+whose encoding has not been measured. A transcript that holds no turn answers
+`turns: 0`.
+
+## The context fixtures
+
+`fixtures/context/<case>/` holds `request.json`, where `{fixture}` stands for
+the case's own directory, `answer.json`, the answer without `schema_version`,
+and the transcripts under `config/`. `test/context_test.ts` gives each
+transcript the modification time its answer names before it runs `main.ts`,
+because a checkout does not keep one.
+
+The transcripts were recorded on Claude Code 2.1.280 on 2026-09-26: interactive
+sessions on Haiku 4.5, each started as the command of its own tmux session on a
+scratch socket, under a scratch config dir seeded with the onboarding keys and
+the worktree's trust, with `DISABLE_AUTOUPDATER=1`. Each attachment entry's body
+and rendered text were removed, because they carry the session's system context,
+the operator's identity among it. No other line was changed.
+
+| Case                    | What was recorded                                                                                                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subagent`              | Two turns, the second running one subagent. The subagent's entries are in `<session>/subagents/`, not in the session's file.                                                                    |
+| `zero-usage-last`       | The same session resumed logged out for one more turn, which ends in the `authentication_failed` entry with no usage.                                                                           |
+| `logged-out-first-turn` | A session started logged out: its first turn is the `authentication_failed` entry.                                                                                                              |
+| `dotted-worktree`       | One turn in `/private/tmp/jymr4-rec/wt a_b.c`, whose transcript is under `-private-tmp-jymr4-rec-wt-a-b-c`.                                                                                     |
+| `sidechain-after-main`  | Derived from `subagent`: the subagent's entries appended to the session's file after its last entry, the case the sidechain skip is for.                                                        |
+| `torn-final-line`       | Derived from `dotted-worktree`: the file cut halfway through its last assistant entry.                                                                                                          |
+| `no-reading`            | Derived from `subagent`: the lines before its first assistant entry. Beside it, a seat with no session id, a session with no file, and a worktree with `é` whose dash-encoded directory exists. |
+
 ## The contract's types
 
 `contract.json` is `fleet agent schema`'s output, byte for byte, and
@@ -104,7 +152,8 @@ FLEET_BIN=/path/to/fleet deno task test
 
 With `FLEET_BIN` set, one arm runs `fleet guard` over sample payloads with this
 adapter's directory and with no flag, and holds the two refusals to the same
-bytes; without it that arm is ignored. No arm runs Claude Code.
+bytes; without it that arm is ignored. No arm runs Claude Code: `context`'s arms
+read the recorded transcripts.
 
 `fleet pack check` over the pack, resolved above ts:
 

@@ -12,8 +12,7 @@
 //   first_turn      policy.rs:62 DEFAULT_FIRST_TURN; {seat} is the seat's
 //                   session name, which fleet fills in.
 //   context         true: the pack reads each seat's transcript
-//                   (fleet-jymr.4). Until that row lands `context` answers
-//                   exit 2 as every unfilled verb does.
+//                   (verbs/context.ts, fleet-jymr.4).
 //   measured        core/src/supported.rs:33 PINNED_CLAUDE_CODE. fleet-jymr.2
 //                   re-measures B10 and D8 on this version (E14) and fleet-
 //                   jymr.6 carries the measurements beside their fixtures.

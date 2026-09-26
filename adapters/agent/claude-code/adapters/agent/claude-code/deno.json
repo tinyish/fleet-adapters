@@ -9,7 +9,8 @@
   },
   "fmt": {
     "exclude": [
-      "contract.json"
+      "contract.json",
+      "fixtures"
     ]
   },
   "lint": {

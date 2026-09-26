@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "root": "{fixture}",
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000007",
+      "session_id": "7aacce74-e9fe-4c2d-abef-3ef601f5bb5d",
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr4-rec/wt"
+    }
+  ]
+}

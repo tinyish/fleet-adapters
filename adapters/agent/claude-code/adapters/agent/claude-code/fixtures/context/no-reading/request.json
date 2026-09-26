@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "root": "{fixture}",
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000003",
+      "session_id": "7aacce74-e9fe-4c2d-abef-3ef601f5bb5d",
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr4-rec/wt"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000004",
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr4-rec/wt"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000005",
+      "session_id": "00000000-0000-4000-8000-000000000000",
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr4-rec/wt"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000006",
+      "session_id": "7aacce74-e9fe-4c2d-abef-3ef601f5bb5d",
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr4-rec/wté"
+    }
+  ]
+}
