@@ -1,4 +1,4 @@
-// packs/tiny/workflows/takeoff.ts — a flight's middle as code. Pre-flight,
+// tiny/workflows/takeoff.ts — a flight's middle as code. Pre-flight,
 // the preboard skill with the person present, hands this run its items, its
 // policy and the test command its landings run; the run spawns a builder per
 // item, waits on each delivery, reviews it — every verdict a hold when the
@@ -7,6 +7,9 @@
 // and the board tick as its last two steps. Every act is a numbered step over
 // the SDK, so a re-run after a Waiting exit replays to where it stopped and
 // spawns nothing twice.
+// The SDK is reached where fleet installs it: `fleet pack add` puts every pack
+// in one packs directory under its own name, so ts sits beside tiny there,
+// whatever path this repository keeps it at (runtimes/ts).
 import { type Run, workflow } from "../../ts/assets/sdk/mod.ts";
 
 export async function takeoff(run: Run): Promise<void> {

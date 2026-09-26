@@ -31,7 +31,8 @@ What it holds today:
   other throw is exit 1 with its reason there the same way; a name mismatch
   at n is exit 1 with `replay diverged at step n`. Under `assets/` for the
   reason this file is. Its suites are the `*_test.ts` files beside it, under
-  Deno's own runner: `deno test -A assets/sdk/` from this pack's root.
+  Deno's own runner, against the fleet binary `FLEET_BIN` names:
+  `ci/check-ts.sh` at the repository's root runs them.
 
 ## The verbs
 

@@ -18,29 +18,18 @@ import { type Body, enter as entered, type Entry, write } from "./store.ts";
 // rather than as the run, which is what a run's own cleared child does.
 Deno.env.delete("FLEET_ACTOR");
 
-const here = import.meta.dirname!;
-const workspace = `${here}/../../../../..`;
-
-/** The built binary: FLEET_BIN where the caller names it, else the workspace's
- * own debug build, built here when it is not there yet. */
+/** The fleet binary every arm runs against: the one FLEET_BIN names. The
+ * binary is built in fleet's own repository, so this suite runs against a
+ * pinned build it is handed (`ci/check-ts.sh`) and never finds or builds one. */
 export const bin: Promise<string> = (async () => {
   const named = Deno.env.get("FLEET_BIN");
-  if (named) return named;
-  const built = `${workspace}/target/debug/fleet`;
-  try {
-    await Deno.stat(built);
-    return built;
-  } catch {
-    // fall through to the build
+  if (!named) {
+    throw new Error(
+      "FLEET_BIN names no fleet binary: set it to the fleet this suite runs against",
+    );
   }
-  const cargo = await new Deno.Command("cargo", {
-    args: ["build", "-q", "-p", "fleet-cli"],
-    cwd: workspace,
-    stdout: "inherit",
-    stderr: "inherit",
-  }).output();
-  if (!cargo.success) throw new Error("cargo build -p fleet-cli failed");
-  return built;
+  await Deno.stat(named);
+  return named;
 })();
 
 export interface Scratch {

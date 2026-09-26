@@ -442,8 +442,8 @@ Deno.test("AC1 hold — under review=hold every verdict is a hold: the flight wa
     ["review", "it-1", "--return", findings, "--by", `run:${runId}`, "--json"],
   ], "B is a return, and nothing lands");
   // The findings file is the JSON `fleet review --return` reads: one finding,
-  // naming the letter. The SDK's fake binary never reads it, so the bytes are
-  // also the fixture the binary's own suite feeds the real verb.
+  // naming the letter. The SDK's fake binary never reads it; fleet's own
+  // suite feeds the real verb a copy of these bytes, in its own repository.
   const written = await Deno.readTextFile(findings);
   const { findings: found } = JSON.parse(written);
   assertEquals(found.length, 1, written);
@@ -451,7 +451,7 @@ Deno.test("AC1 hold — under review=hold every verdict is a hold: the flight wa
   assertEquals(
     written,
     await Deno.readTextFile(`${here}/testdata/takeoff_findings_b.json`),
-    "the file cli/tests/deliver.rs feeds `fleet review --return`",
+    "the file fleet's review --return arm feeds the verb",
   );
   assertEquals(closes(await lines(s)).map((l) => l.payload.name), [
     ...INPUTS,

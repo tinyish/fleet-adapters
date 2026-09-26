@@ -312,13 +312,16 @@ Deno.test("until held — an item with no open hold waits on its held entries, a
  * name as `controller/src/runs.rs` spells them, and the kinds core's verbs
  * signal, off each `signal(…, "<kind>")` call in `core/src/item`: the SDK
  * reaches neither crate but through the binary, so its suite reads their
- * source. */
+ * source — a checkout of fleet at the commit FLEET_BIN was built from, which
+ * FLEET_SOURCE names. */
+const fleetSource = Deno.env.get("FLEET_SOURCE");
+
 async function rustTables(): Promise<{
   kinds: string[];
   wakeable: string[];
   signalled: Set<string>;
 }> {
-  const workspace = `${here}/../../../..`;
+  const workspace = fleetSource!;
   const listed = (text: string, name: string, file: string): string[] => {
     const declared = new RegExp(
       `pub const ${name}: \\[&str; \\d+\\] = \\[([^\\]]*)\\];`,
@@ -344,7 +347,11 @@ async function rustTables(): Promise<{
   return { kinds, wakeable, signalled };
 }
 
-Deno.test("KINDS_OF — every state waits on entry kinds core defines, the controller's wake reads and a verb signals, and so does a hold's clearance", async () => {
+Deno.test({
+  name:
+    "KINDS_OF — every state waits on entry kinds core defines, the controller's wake reads and a verb signals, and so does a hold's clearance",
+  ignore: !fleetSource,
+}, async () => {
   const { kinds, wakeable, signalled } = await rustTables();
   assertEquals(kinds.length, 7, `core's seven entry kinds: ${kinds}`);
   assertEquals(wakeable, kinds, "the controller reads core's entry kinds");
