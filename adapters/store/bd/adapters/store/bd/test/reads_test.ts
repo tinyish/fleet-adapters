@@ -66,15 +66,15 @@ Deno.test("a version that is no answer is could not tell", async () => {
 
 /**
  * No bd call. The prefix is the config's own, the command `bd`, bd's nine
- * types and 0 to 4 — and neither export nor scratch until fleet-rsia.4's
- * verbs answer them.
+ * types and 0 to 4, the export `.beads/issues.jsonl` under `.beads/`, and
+ * scratch stores.
  */
 Deno.test("capabilities read the prefix off the config and call no bd", async () => {
   const named = over(() => ({ code: 99 }), "# a comment\nissue-prefix: ap\n");
   const answer = await named.verb("capabilities")(ENVELOPE_ON);
   assertEquals(answer, {
-    export: null,
-    scratch: false,
+    export: { file: ".beads/issues.jsonl", dir: ".beads/" },
+    scratch: true,
     item_prefix: "ap",
     cli: "bd",
     items: { types: TYPES, priority: { min: 0, max: 4 } },

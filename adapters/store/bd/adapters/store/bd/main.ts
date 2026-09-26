@@ -37,7 +37,10 @@
 
 import { emit, type Handlers, respond } from "./lib/answer.ts";
 import { Bd, binary, SEAM } from "./lib/bd.ts";
+import { holds } from "./verbs/holds.ts";
+import { orders } from "./verbs/orders.ts";
 import { reads } from "./verbs/reads.ts";
+import { store } from "./verbs/store.ts";
 import { writes } from "./verbs/writes.ts";
 
 /** The bd every verb runs, resolved when the first verb that runs one asks. */
@@ -46,12 +49,16 @@ function open(root: string): Bd {
 }
 
 /**
- * Every verb this pack answers. A verb of the contract not named here —
- * fleet-rsia.4's order.set, order.withdraw, run.set, hold.raise, hold.clear,
- * holds.open, export and scratch — answers usage, exit 2, until its file
- * lands.
+ * Every verb this pack answers: every verb of the contract. One the contract
+ * gains and no file here answers is usage, exit 2.
  */
-export const HANDLERS: Handlers = { ...reads(open), ...writes(open) };
+export const HANDLERS: Handlers = {
+  ...reads(open),
+  ...writes(open),
+  ...orders(open),
+  ...holds(open),
+  ...store(open),
+};
 
 if (import.meta.main) {
   const stdin = await new Response(Deno.stdin.readable).text();

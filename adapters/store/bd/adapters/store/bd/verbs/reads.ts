@@ -32,15 +32,14 @@ export const TYPES = [
 export const CONFIG = ".beads/config.yaml";
 
 /**
- * WHAT THIS PACK ANSWERS BEYOND THE VERBS EVERY STORE ANSWERS, and nothing
- * it does not answer yet: `export` and `scratch` are declared by the verbs
- * that build them (fleet-rsia.4), as `.beads/issues.jsonl` under `.beads/`
- * and `true`. Until then the contract's reading of a capability not declared
- * holds — the verb answers usage, exit 2 — and `fleet store check` refuses
- * to run, naming the missing scratch, rather than failing on a declaration
- * the pack does not keep.
+ * WHAT THIS PACK ANSWERS BEYOND THE VERBS EVERY STORE ANSWERS: the export,
+ * `.beads/issues.jsonl` under `.beads/` — the one file verbs/store.ts's
+ * `export` writes, named here once — and scratch stores.
  */
-export const DECLARED = { export: null, scratch: false } as const;
+export const DECLARED = {
+  export: { file: ".beads/issues.jsonl", dir: ".beads/" },
+  scratch: true,
+} as const;
 
 /**
  * The version the first line of `bd version` names — `1.3.0` of `bd version

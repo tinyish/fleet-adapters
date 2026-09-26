@@ -45,10 +45,12 @@ async function call(
   verb: string,
   request: Record<string, unknown>,
   env: Record<string, string> = {},
+  cwd?: string,
 ): Promise<Called> {
   const child = new Deno.Command(MAIN, {
     args: [verb],
     env,
+    cwd,
     stdin: "piped",
     stdout: "piped",
     stderr: "piped",
@@ -852,6 +854,347 @@ Deno.test({
           const closed = await closeBy(id, `seat:${SEAT}`);
           assertEquals(closed.exit, 0, closed.stderr);
           assertEquals((await show(id)).status, "closed");
+        },
+      );
+    } finally {
+      await Deno.remove(dir, { recursive: true });
+    }
+  },
+});
+
+/** An item's row off bd itself, as the board holds it. */
+async function row(root: string, id: string): Promise<Record<string, unknown>> {
+  const rows = await bd(root, "show", id) as Record<string, unknown>[];
+  return rows[0];
+}
+
+/** What `show` answers through main.ts. */
+async function shown(
+  root: string,
+  id: string,
+): Promise<Record<string, unknown>> {
+  const { exit, answer, stderr } = await call("show", { root, id });
+  assertEquals(exit, 0, stderr);
+  return answer?.item as Record<string, unknown>;
+}
+
+function refusedAs(called: Called): string {
+  return (called.answer?.refused as { reason: string } | undefined)?.reason ??
+    `exit ${called.exit}: ${called.stderr}`;
+}
+
+Deno.test({
+  name:
+    "main.ts answers orders, runs, holds, export and scratch over a real bd board",
+  ignore: !HAS_BD,
+  async fn(t) {
+    const dir = await Deno.makeTempDir({ prefix: "bd-pack-" });
+    const BY = "run:main-test";
+    const OTHER = "0199a3c4-7d8e-7f90-a1b2-c3d4e5f60719";
+    const ORDER = {
+      kind: "dispatch",
+      by: "run:main-test-architect",
+      seat: SEAT,
+      at: "2026-09-13T00:00:00Z",
+    };
+    const RECORD = {
+      hash: "h1",
+      workflow: "greet",
+      pack: "ts",
+      entry: "greet.ts",
+      started_at: "2026-09-13T00:00:00Z",
+    };
+    let root = "";
+    try {
+      await t.step(
+        "scratch into a directory holding anything makes nothing",
+        async () => {
+          const full = `${dir}/full`;
+          await Deno.mkdir(full);
+          await Deno.writeTextFile(`${full}/keep.txt`, "a person's file");
+          const refused = await call("scratch", { root: dir, into: full });
+          assertEquals(refused.exit, 3, refused.stderr);
+          assert(refused.stderr.includes("holds keep.txt"), refused.stderr);
+          const left = [];
+          for await (const entry of Deno.readDir(full)) left.push(entry.name);
+          assertEquals(left, ["keep.txt"]);
+        },
+      );
+
+      await t.step(
+        "scratch into an empty directory makes a store naming its prefix",
+        async () => {
+          await Deno.mkdir(`${dir}/store`);
+          // `into` relative to the request's root, as a person might send it.
+          const made = await call("scratch", { root: dir, into: "store" });
+          assertEquals(made.exit, 0, made.stderr);
+          root = made.answer?.root as string;
+          assertEquals(root, `${dir}/store`);
+          const config = await Deno.readTextFile(`${root}/.beads/config.yaml`);
+          assert(/^issue-prefix: "fx"$/m.test(config), config);
+          const declared = await call("capabilities", { root });
+          assertEquals(declared.answer?.item_prefix, "fx");
+          assertEquals(declared.answer?.export, {
+            file: ".beads/issues.jsonl",
+            dir: ".beads/",
+          });
+          assertEquals(declared.answer?.scratch, true);
+          assert((await filed(root, "the first")).startsWith("fx-"));
+          const holds = await call("holds.open", { root });
+          assertEquals([holds.exit, holds.answer?.holds], [0, []]);
+        },
+      );
+
+      await t.step(
+        "order.set and run.set keep each other and another writer's keys, which are foreign",
+        async () => {
+          const id = await filed(
+            root,
+            "an item ordered twice",
+            "--labels",
+            "t",
+          );
+          const theirs = {
+            orders: { seat: "another-tools-seat" },
+            a_prior_key: 7,
+          };
+          await bd(
+            root,
+            "update",
+            id,
+            "--metadata",
+            JSON.stringify(theirs),
+            "--actor",
+            "someone",
+          );
+          const second = { ...ORDER, kind: "review", seat: OTHER };
+          const later = { ...RECORD, hash: "h2" };
+          for (
+            const [verb, body] of [
+              ["run.set", { run: RECORD }],
+              ["order.set", { order: ORDER }],
+              ["order.set", { order: second }],
+              ["run.set", { run: later }],
+            ] as const
+          ) {
+            const done = await call(verb, { root, id, by: BY, ...body });
+            assertEquals(
+              [done.exit, done.answer],
+              [0, { schema_version: 1 }],
+              done.stderr,
+            );
+          }
+          const item = await shown(root, id);
+          assertEquals(item.order, { state: "ordered", order: second });
+          assertEquals(item.run, later);
+          assertEquals(item.assignee, null, "an order touches no assignee");
+          assertEquals((item.foreign as string[]).toSorted(), [
+            "a_prior_key",
+            "orders",
+          ]);
+          const metadata = (await row(root, id)).metadata as Record<
+            string,
+            unknown
+          >;
+          assertEquals([metadata.orders, metadata.a_prior_key], [
+            theirs.orders,
+            7,
+          ]);
+          const listed = await call("list", { root, filter: { label: "t" } });
+          const summary = (listed.answer?.items as Record<string, unknown>[])
+            .find((one) => one.id === id);
+          assertEquals((summary?.foreign as string[]).toSorted(), [
+            "a_prior_key",
+            "orders",
+          ]);
+
+          const transient = { kind: "dispatch", by: BY, at: RECORD.started_at };
+          await call("order.set", { root, id, by: BY, order: transient });
+          assertEquals((await shown(root, id)).order, {
+            state: "ordered",
+            order: transient,
+          });
+        },
+      );
+
+      await t.step("a write to an id no item carries is missing", async () => {
+        for (
+          const [verb, body] of [
+            ["order.set", { order: ORDER }],
+            ["run.set", { run: RECORD }],
+            ["order.withdraw", {}],
+            ["order.withdraw", { if_assignee: null }],
+            ["hold.raise", { reason: "r" }],
+          ] as const
+        ) {
+          const refused = await call(verb, {
+            root,
+            id: "fx-nobody",
+            by: BY,
+            ...body,
+          });
+          assertEquals(
+            [refused.exit, refusedAs(refused)],
+            [1, "missing"],
+            verb,
+          );
+        }
+        const clear = await call("hold.clear", {
+          root,
+          hold: "fx-nobody",
+          by: BY,
+        });
+        assertEquals([clear.exit, refusedAs(clear)], [1, "missing"]);
+      });
+
+      await t.step(
+        "a withdrawal whose fence the item does not meet is moved, with nothing written",
+        async () => {
+          const id = await filed(root, "an item a withdrawal reaches");
+          await bd(root, "update", id, "--assignee", SEAT, "--actor", BY);
+          await call("run.set", { root, id, by: BY, run: RECORD });
+          await call("order.set", { root, id, by: BY, order: ORDER });
+          await bd(root, "close", id, "--reason", "landed", "--actor", SEAT);
+          const before = await shown(root, id);
+          for (
+            const [fence, named] of [
+              [{ if_assignee: OTHER, if_status: "closed" }, SEAT],
+              [{ if_assignee: null, if_status: "closed" }, SEAT],
+              [{ if_assignee: SEAT, if_status: "open" }, "closed"],
+            ] as const
+          ) {
+            const missed = await call("order.withdraw", {
+              root,
+              id,
+              by: BY,
+              reopen: true,
+              ...fence,
+            });
+            assertEquals(
+              [missed.exit, refusedAs(missed)],
+              [1, "moved"],
+              missed.stderr,
+            );
+            const said =
+              (missed.answer?.refused as { message: string }).message;
+            assert(said.includes(id) && said.includes(named), said);
+            assertEquals(await shown(root, id), before, "nothing was written");
+          }
+
+          const reopened = await call("order.withdraw", {
+            root,
+            id,
+            by: BY,
+            if_assignee: SEAT,
+            if_status: "closed",
+            reopen: true,
+          });
+          assertEquals(reopened.exit, 0, reopened.stderr);
+          const now = await shown(root, id);
+          assertEquals(
+            [now.assignee, now.order, now.status, now.run],
+            [null, { state: "none" }, "open", RECORD],
+          );
+          const ready = await call("list", { root, filter: "ready" });
+          assert(
+            (ready.answer?.items as { id: string }[]).some((one) =>
+              one.id === id
+            ),
+            `${id} is back in the ready set`,
+          );
+
+          // Unfenced, the same one act: the holder and the order both go.
+          await bd(root, "update", id, "--assignee", SEAT, "--actor", BY);
+          await call("order.set", { root, id, by: BY, order: ORDER });
+          const plain = await call("order.withdraw", { root, id, by: BY });
+          assertEquals(plain.exit, 0, plain.stderr);
+          const after = await shown(root, id);
+          assertEquals([after.assignee, after.order, after.status], [null, {
+            state: "none",
+          }, "open"]);
+        },
+      );
+
+      await t.step(
+        "a hold takes its item out of ready, and a second clear answers already",
+        async () => {
+          const id = await filed(root, "an item to hold");
+          const raised = await call("hold.raise", {
+            root,
+            id,
+            by: BY,
+            reason: "a question",
+          });
+          assertEquals(raised.exit, 0, raised.stderr);
+          const hold = raised.answer?.hold as string;
+          assert(hold.startsWith("fx-") && hold !== id, hold);
+          const open = await call("holds.open", { root });
+          assertEquals(open.answer?.holds, [hold]);
+          const ready = async () =>
+            ((await call("list", { root, filter: "ready" })).answer?.items as {
+              id: string;
+            }[])
+              .map((one) => one.id);
+          assert(!(await ready()).includes(id), "held, it is not ready");
+
+          const cleared = await call("hold.clear", { root, hold, by: BY });
+          assertEquals([cleared.exit, cleared.answer], [0, {
+            schema_version: 1,
+          }], cleared.stderr);
+          assertEquals((await call("holds.open", { root })).answer?.holds, []);
+          assert((await ready()).includes(id), "cleared, it is ready again");
+
+          const again = await call("hold.clear", { root, hold, by: BY });
+          assertEquals([again.exit, refusedAs(again)], [1, "already"]);
+          assertEquals(
+            (again.answer?.refused as { message: string }).message,
+            `${hold} is already cleared`,
+          );
+          const notGate = await call("hold.clear", { root, hold: id, by: BY });
+          assertEquals([notGate.exit, refusedAs(notGate)], [1, "missing"]);
+        },
+      );
+
+      await t.step(
+        "export writes under a relative into, resolved against the root and not the caller's directory",
+        async () => {
+          const elsewhere = `${dir}/elsewhere`;
+          await Deno.mkdir(elsewhere);
+          const id = await filed(root, "an item the export carries");
+          const exported = await call(
+            "export",
+            { root, into: "lane" },
+            {},
+            elsewhere,
+          );
+          assertEquals(exported.exit, 0, exported.stderr);
+          const file = `${root}/lane/.beads/issues.jsonl`;
+          assertEquals(exported.answer?.file, file);
+          assert((await Deno.readTextFile(file)).includes(id));
+          const left = [];
+          for await (const entry of Deno.readDir(elsewhere)) {
+            left.push(entry.name);
+          }
+          assertEquals(
+            left,
+            [],
+            "nothing was written under the caller's directory",
+          );
+
+          const home = await call(
+            "export",
+            { root, into: root },
+            {},
+            elsewhere,
+          );
+          assertEquals(home.answer?.file, `${root}/.beads/issues.jsonl`);
+          const before = await Deno.readTextFile(`${root}/.beads/issues.jsonl`);
+          await bd(root, "comments", "add", id, "a line", "--actor", BY);
+          await call("export", { root, into: root });
+          assert(
+            (await Deno.readTextFile(`${root}/.beads/issues.jsonl`)) !== before,
+            "the export moves with the timeline",
+          );
         },
       );
     } finally {
