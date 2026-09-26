@@ -1,0 +1,12 @@
+[
+  {
+    "pid": 84311,
+    "cwd": "/private/tmp/jymr3-rec/wt",
+    "kind": "interactive",
+    "startedAt": 1790417738915,
+    "sessionId": "19edc64f-9110-4368-982c-98ea5600e1d3",
+    "name": "ra",
+    "status": "idle",
+    "someFieldNobodyHasSeen": {"harmless": true}
+  }
+]

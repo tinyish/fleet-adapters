@@ -5,9 +5,10 @@
 // and turns_in (controller/src/observe.rs 386-548) — so `context` answers
 // what fleet's own reader answered (ruling 4: the adapter reads transcripts).
 //
-// EVERY READER HERE IS PURE: a body in, a reading out. The file is read by
-// verbs/context.ts, and fleet-jymr.3's logged-out arm reads the same entries
-// through loggedOutFirstTurn.
+// EVERY READER HERE IS PURE: a body in, a reading out, but for
+// transcriptFor, which resolves the worktree on disk. The file is read by
+// verbs/context.ts, and verbs/read.ts's logged-out arm reads the same entries
+// through loggedOutFirstTurn; both find it through transcriptFor.
 //
 // A TRANSCRIPT IS READ WHILE IT IS APPENDED TO, so a line that is not JSON —
 // a torn final line — is skipped, never fatal.
@@ -51,6 +52,31 @@ export function transcriptPath(
   return `${configDir.replace(/\/+$/, "")}/projects/${
     encodeProjectDir(worktree)
   }/${sessionId}.jsonl`;
+}
+
+/**
+ * The session's transcript as transcriptPath names it, for the worktree as
+ * the agent saw it: RESOLVED, every symlink on its way followed, before it is
+ * encoded. Measured on 2.1.280 (fleet-jymr.4): a session started in
+ * `/tmp/jymr4-rec/wt a_b.c` wrote under `-private-tmp-jymr4-rec-wt-a-b-c`,
+ * the directory of its resolved cwd — /tmp is a symlink on macOS, and so is
+ * /var, where a temporary directory lives — as fleet-rge6.2 found trust is
+ * keyed on the resolved path too. A worktree that does not resolve, gone or
+ * never there, is encoded as given: the file it names is then simply not
+ * found.
+ */
+export async function transcriptFor(
+  configDir: string,
+  worktree: string,
+  sessionId: string,
+): Promise<string | undefined> {
+  let resolved = worktree;
+  try {
+    resolved = await Deno.realPath(worktree);
+  } catch {
+    // Not there to resolve: encoded as the request names it.
+  }
+  return transcriptPath(configDir, resolved, sessionId);
 }
 
 /** An entry's usage block: the three figures the window is summed from. */

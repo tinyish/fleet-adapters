@@ -1,0 +1,29 @@
+#!/bin/sh
+# The read fixtures' claude: it replays the `claude agents --json --all`
+# recorded under a config dir, and answers nothing else. Each case's env.json
+# names it as FLEET_CLAUDE_BIN, so the adapter runs it exactly as it runs
+# Claude Code: one call per config dir, under CLAUDE_CONFIG_DIR.
+#
+# Under <config dir>: listing.json is the listing's stdout, byte for byte;
+# listing.exit, where present, its exit code; listing.stderr, where present,
+# its stderr. A config dir with no listing.json has no recording, and that is
+# a broken fixture, never a listing: it exits 66, saying so.
+if [ "$*" != "agents --json --all" ]; then
+  echo "the read fixtures' claude replays \`agents --json --all\`, not \`$*\`" >&2
+  exit 64
+fi
+if [ "${CLAUDE_SECURESTORAGE_CONFIG_DIR+set}" != set ]; then
+  echo "CLAUDE_SECURESTORAGE_CONFIG_DIR is unset: the listing would run logged out" >&2
+  exit 65
+fi
+dir="${CLAUDE_CONFIG_DIR:?CLAUDE_CONFIG_DIR is unset}"
+if [ ! -f "$dir/listing.json" ]; then
+  echo "no listing is recorded under $dir" >&2
+  exit 66
+fi
+[ -f "$dir/listing.stderr" ] && cat "$dir/listing.stderr" >&2
+cat "$dir/listing.json"
+if [ -f "$dir/listing.exit" ]; then
+  exit "$(cat "$dir/listing.exit")"
+fi
+exit 0

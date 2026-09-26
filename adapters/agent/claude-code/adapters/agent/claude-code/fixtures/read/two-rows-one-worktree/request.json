@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "root": "{fixture}",
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000304",
+      "session_id": "19edc64f-9110-4368-982c-98ea5600e1d3",
+      "pid": 84311,
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr3-rec/wt"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000305",
+      "pid": 6630,
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr3-rec/wt"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000306",
+      "pid": 6631,
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr3-rec/wt"
+    }
+  ]
+}

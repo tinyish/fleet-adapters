@@ -52,15 +52,17 @@ import { emit, type Handlers, respond } from "./lib/answer.ts";
 import { CAPABILITIES } from "./lib/capabilities.ts";
 import { capabilities } from "./verbs/capabilities.ts";
 import { context } from "./verbs/context.ts";
+import { read } from "./verbs/read.ts";
 
 /**
  * Every verb this pack answers, each from verbs/<verb>.ts. A verb of the
  * contract no file here answers yet — version, launch and resume
- * (fleet-jymr.2), read (fleet-jymr.3) — is usage, exit 2.
+ * (fleet-jymr.2) — is usage, exit 2.
  */
 export const HANDLERS: Handlers = {
   capabilities,
   context,
+  read,
 };
 
 if (import.meta.main) {

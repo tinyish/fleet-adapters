@@ -1,0 +1,14 @@
+{
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000309",
+      "activity": "starting",
+      "evidence": "typed"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000310",
+      "activity": "starting",
+      "evidence": "typed"
+    }
+  ]
+}

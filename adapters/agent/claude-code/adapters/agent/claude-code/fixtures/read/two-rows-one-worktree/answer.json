@@ -1,0 +1,21 @@
+{
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000304",
+      "activity": "idle",
+      "evidence": "typed",
+      "session_id": "19edc64f-9110-4368-982c-98ea5600e1d3"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000305",
+      "activity": "idle",
+      "evidence": "typed",
+      "session_id": "a4cb1087-78d7-4218-a251-0c3422dca5c3"
+    },
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000306",
+      "activity": "starting",
+      "evidence": "typed"
+    }
+  ]
+}

@@ -199,6 +199,44 @@ Deno.test("a transcript resolves under the directory it is read with", async () 
 });
 
 /**
+ * The transcript directory is keyed on the RESOLVED worktree (measured on
+ * 2.1.280: `-c "/tmp/jymr4-rec/wt a_b.c"` wrote under
+ * -private-tmp-jymr4-rec-wt-a-b-c), so a worktree named through a symlink is
+ * resolved before it is encoded, and reads the file the session wrote.
+ */
+Deno.test("a worktree named through a symlink reads the resolved one's transcript", async () => {
+  const { dir, request, answer } = await staged("dotted-worktree");
+  try {
+    const [seat] = request.seats;
+    await Deno.mkdir(`${dir}/real wt`);
+    await Deno.symlink(`${dir}/real wt`, `${dir}/link`);
+    const resolved = await Deno.realPath(`${dir}/real wt`);
+    const recorded = transcriptPath(
+      seat.config_dir!,
+      seat.worktree,
+      seat.session_id!,
+    )!;
+    const moved = transcriptPath(seat.config_dir!, resolved, seat.session_id!)!;
+    await Deno.mkdir(moved.slice(0, moved.lastIndexOf("/")), {
+      recursive: true,
+    });
+    await Deno.rename(recorded, moved);
+    const called = await call(
+      JSON.stringify({
+        schema_version: 1,
+        root: dir,
+        seats: [{ ...seat, worktree: `${dir}/link` }],
+      }),
+      base(),
+    );
+    assertEquals(called.exit, 0, called.stderr);
+    assertEquals(called.answer?.seats, answer.seats);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+/**
  * A seat whose config_dir cannot be named — none in the request, and neither
  * CLAUDE_CONFIG_DIR nor HOME set — is could not tell, exit 3, naming why; a
  * seat with no session id never asks, so it answers blind without them.

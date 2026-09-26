@@ -19,7 +19,7 @@ import { configDirFor, type Env } from "../lib/config_dir.ts";
 import {
   contextTokens,
   entries,
-  transcriptPath,
+  transcriptFor,
   turns,
 } from "../lib/transcript.ts";
 
@@ -41,7 +41,11 @@ export async function seatContext(
   const blind: SeatContext = { seat: seat.seat };
   const session = seat.session_id?.trim() ?? "";
   if (session === "") return blind;
-  const path = transcriptPath(configDirFor(seat, env), seat.worktree, session);
+  const path = await transcriptFor(
+    configDirFor(seat, env),
+    seat.worktree,
+    session,
+  );
   if (path === undefined) return blind;
   let body: string;
   let written: Date | null;

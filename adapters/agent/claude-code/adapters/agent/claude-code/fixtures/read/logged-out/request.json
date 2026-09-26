@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "root": "{fixture}",
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000313",
+      "pid": 6658,
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr3-rec/wt"
+    }
+  ]
+}

@@ -11,10 +11,10 @@
 // environment is not this: it is launch's answer, which core sets exactly
 // (D1, E2). The in-process adapter also clears and rebuilds the environment
 // of its reads, because a `claude` call could start the background daemon
-// every later session was claimed from (lessons claude-code D1); fleet's
-// seats run in their own tmux sessions since fleet-rge6.2, and whether a read
-// such as `claude agents` still starts that daemon on 2.1.280 is
-// fleet-jymr.3's to measure before it reads the listing through run().
+// every later session was claimed from (lessons claude-code D1). fleet's
+// seats run in their own tmux sessions since fleet-rge6.2, and on 2.1.280 the
+// listing starts no daemon (measured by fleet-jymr.3, lib/listing.ts), so
+// this adapter's reads keep the inherited environment.
 //
 // NO PROCESS GROUP: Deno starts a child in this process's own group, and the
 // bound here kills the child alone. fleet bounds the whole call at 20 s and

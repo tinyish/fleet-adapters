@@ -1,0 +1,10 @@
+{
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000311",
+      "activity": "unknown",
+      "evidence": "typed",
+      "cause": "the listing answered with zero bytes and a success status"
+    }
+  ]
+}

@@ -17,9 +17,9 @@ The pack is `adapters/agent/claude-code/` in this repository, and the paths
 below are the pack's. This file sits in the adapter's own directory because a
 pack's top level holds `pack.toml` and the eight slots and nothing else.
 
-**Status:** the pack answers `capabilities` and `context`. `version`, `launch`,
-`resume` and `read` answer exit 2, usage, naming the verb, until the rows that
-fill them land.
+**Status:** the pack answers `capabilities`, `context` and `read`. `version`,
+`launch` and `resume` answer exit 2, usage, naming the verb, until the row that
+fills them lands.
 
 ## What it needs
 
@@ -85,9 +85,10 @@ deno run --no-config --no-prompt --quiet --allow-run=<claude> --allow-read --all
 `context` reads each seat's transcript, the file Claude Code writes the session
 to, and runs no claude. The file is
 `<config dir>/projects/<worktree>/<session id>.jsonl`, where `<worktree>` is the
-seat's worktree with every character that is not a letter or a digit replaced by
-`-`, and the config dir is the seat's `config_dir`, or for a seat without one,
-`CLAUDE_CONFIG_DIR`, else `~/.claude`. Each seat answers:
+seat's worktree, resolved through any symlink on its way, with every character
+that is not a letter or a digit replaced by `-`, and the config dir is the
+seat's `config_dir`, or for a seat without one, `CLAUDE_CONFIG_DIR`, else
+`~/.claude`. Each seat answers:
 
 - `tokens`: the input tokens and both cache figures of the last assistant entry
   on the session's own chain whose sum is not zero. A subagent's entries and an
@@ -128,6 +129,81 @@ the operator's identity among it. No other line was changed.
 | `torn-final-line`       | Derived from `dotted-worktree`: the file cut halfway through its last assistant entry.                                                                                                          |
 | `no-reading`            | Derived from `subagent`: the lines before its first assistant entry. Beside it, a seat with no session id, a session with no file, and a worktree with `é` whose dash-encoded directory exists. |
 
+## What `read` answers
+
+`read` answers what the agent in each seat's live session is doing. Whether the
+session exists and its pane is alive is fleet's to read, from tmux, and never
+this adapter's.
+
+The seats are grouped by config dir, as `context` names it, and each dir is
+listed once with `claude agents --json --all`, run with `CLAUDE_CONFIG_DIR` set
+to it, because a config dir scopes the listing. The listings run at once.
+
+A seat's session is the listing's interactive row carrying the seat's
+`session_id`. Where no row carries it, or the request has none, it is the
+interactive row whose `pid` is the seat's pane's. A background row is never a
+seat's, and a seat is never found by its worktree. Each seat answers:
+
+| The listing                                                         | `activity` | `blocked_on` | `evidence` |
+| ------------------------------------------------------------------- | ---------- | ------------ | ---------- |
+| The row's `waitingFor` is `permission prompt`                       | `blocked`  | `permission` | `typed`    |
+| The row carries any other `waitingFor`                              | `blocked`  | —            | `typed`    |
+| The row's `status` is `idle`, and its first turn was not logged out | `idle`     | —            | `typed`    |
+| The row's `status` is `idle`, and its first turn was logged out     | `blocked`  | `logged_out` | `typed`    |
+| The row's `status` is `busy`                                        | `busy`     | —            | `typed`    |
+| The row's `status` is `waiting`, with no `waitingFor`               | `blocked`  | —            | `typed`    |
+| The row carries no `status`, or one of any other word               | `unknown`  | —            | `typed`    |
+| No row, and the screen shows the workspace-trust question           | `blocked`  | `question`   | `screen`   |
+| No row                                                              | `starting` | —            | `typed`    |
+| The listing could not be read                                       | `unknown`  | —            | `typed`    |
+
+A seat whose session was found answers the row's `sessionId` as `session_id`, so
+a seat known only by its pane learns its session. The first turn is logged out
+where the session's transcript begins with the `authentication_failed` entry
+Claude Code writes in place of a model call. `usage_limit` is never answered:
+its shape has not been measured.
+
+A listing could not be read where it exits non-zero, answers zero bytes, or
+answers rows that do not parse. Every seat under that dir answers `unknown`,
+with `cause` saying which, and every other dir is read as usual. An empty array
+is a listing that answered.
+
+On Claude Code 2.1.280 the listing starts no background daemon, so it runs under
+fleet's own environment, as every call of this adapter does.
+
+## The read fixtures
+
+`fixtures/read/<case>/` holds `request.json` and `env.json`, where `{fixture}`
+stands for the case's own directory, and `answer.json`, the answer without
+`schema_version`. `env.json` names `fixtures/read/claude` as `FLEET_CLAUDE_BIN`.
+That script answers `agents --json --all` and nothing else: under each config
+dir a case holds, `listing.json` is the listing's standard output byte for byte,
+and `listing.exit` and `listing.stderr`, where present, its exit code and
+standard error.
+
+The listings were recorded on Claude Code 2.1.280 on 2026-09-26: interactive
+sessions on Haiku 4.5, each started as the command of its own tmux session on a
+scratch socket, under a scratch config dir seeded with the onboarding keys and
+the worktree's trust, with `DISABLE_AUTOUPDATER=1`, and listed under a cleared
+environment scoped to that dir. Each attachment entry's body and rendered text
+were removed from the two transcripts, as for the context fixtures, and the
+account's plan from the banner of the waiting screen; no other recorded byte was
+changed.
+
+| Case                    | What was recorded                                                                                                                                                                   |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `idle`                  | One session at its prompt after five turns, and its transcript, whose first turn answered.                                                                                          |
+| `busy`                  | The same session mid-turn.                                                                                                                                                          |
+| `waiting-permission`    | The same session at a Bash approval, `waitingFor: "permission prompt"`, with the pane as it was.                                                                                    |
+| `two-rows-one-worktree` | A second session in the same worktree and config dir: one seat found by its session id, one by its pane's pid alone, and one whose pid no row carries.                              |
+| `empty-listing`         | A config dir with no session: `[]`.                                                                                                                                                 |
+| `trust-question`        | A session in a worktree with no trust entry: the listing `[]` while the question is up, and the pane showing it.                                                                    |
+| `logged-out`            | A session started without the credential scope, found by its pane's pid: an idle row, and a transcript whose first turn is `authentication_failed`.                                 |
+| `unknown-field`         | Derived from `idle`: one field no reader names added to the row.                                                                                                                    |
+| `background-row`        | Derived: a background row, the shape of the daemon era, carrying the seat's session id and pid. It is never a seat's.                                                               |
+| `zero-bytes`            | Derived: zero bytes and exit 0, the unreadable listing of lessons B4, seen on a release nobody recorded, which cannot be made on demand.                                            |
+| `one-dir-fails`         | Three config dirs: the `two-rows-one-worktree` listing, a second dir's own recorded session, and a derived listing that exits 1. A seat is seen only through its own dir's listing. |
+
 ## The contract's types
 
 `contract.json` is `fleet agent schema`'s output, byte for byte, and
@@ -153,7 +229,8 @@ FLEET_BIN=/path/to/fleet deno task test
 With `FLEET_BIN` set, one arm runs `fleet guard` over sample payloads with this
 adapter's directory and with no flag, and holds the two refusals to the same
 bytes; without it that arm is ignored. No arm runs Claude Code: `context`'s arms
-read the recorded transcripts.
+read the recorded transcripts, and `read`'s replay the recorded listings through
+`fixtures/read/claude`.
 
 `fleet pack check` over the pack, resolved above ts:
 

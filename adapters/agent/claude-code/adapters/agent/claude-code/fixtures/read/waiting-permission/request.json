@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "root": "{fixture}",
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000303",
+      "session_id": "19edc64f-9110-4368-982c-98ea5600e1d3",
+      "pid": 84311,
+      "config_dir": "{fixture}/config",
+      "worktree": "/private/tmp/jymr3-rec/wt",
+      "screen": "\n ▐▛███▛█   Claude Code v2.1.280\n▝▜██████▀  Haiku 4.5 · (plan stripped)\n  ▝▝ ▝▝    /private/tmp/jymr3-rec/wt\n\n  Get to finished work sooner with Opus 5.5. Switch anytime with /model.\n  1 more notice hidden\n\n❯ Reply with the single word ok and nothing else.\n\n⏺ ok\n\n✻ Worked for 1s · done 3:22 AM\n\n❯ Use the Bash tool to run the command: date\n\n  Ran 1 shell command\n\n⏺ The current date and time is: Sat Sep 26 03:22:15 PDT 2026\n\n✻ Cogitated for 3s · done 3:22 AM\n\n❯ Use the Bash tool to run exactly this command: touch approval-probe.txt\n\n⏺ Creating an empty file named approval-probe.txt\n  ⎿  $ touch approval-probe.txt\n\n────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n Bash command\n\n   touch approval-probe.txt\n   Create an empty file named approval-probe.txt\n\n Do you want to proceed?\n ❯ 1. Yes\n   2. Yes, and always allow access to /private/tmp/jymr3-rec/wt from this project\n   3. No\n\n Esc to cancel · Tab to amend\n\n\n\n\n\n\n\n\n\n\n\n"
+    }
+  ]
+}

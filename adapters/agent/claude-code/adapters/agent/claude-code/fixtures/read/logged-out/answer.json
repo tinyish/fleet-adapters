@@ -1,0 +1,11 @@
+{
+  "seats": [
+    {
+      "seat": "0199a3c4-0000-7000-8000-000000000313",
+      "activity": "blocked",
+      "blocked_on": "logged_out",
+      "evidence": "typed",
+      "session_id": "11c48ca5-d5ee-4f86-b7a1-c06047a74398"
+    }
+  ]
+}
