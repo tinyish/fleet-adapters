@@ -1,0 +1,13 @@
+[pack]
+name = "claude-code"
+version = "0.1.0"
+schema = 3
+description = "Claude Code 2.1.280 behind the agent contract, with the mapping of its pre-tool hook."
+
+# The adapter is written for Deno, and Deno is pinned by the ts pack, so this
+# pack imports that one rather than pinning a runtime of its own. The path is
+# read from this pack's own directory, adapters/agent/claude-code/, and climbs
+# to the repository's runtimes/ts.
+[imports.ts]
+source = "../../../runtimes/ts"
+version = "0.1.0"

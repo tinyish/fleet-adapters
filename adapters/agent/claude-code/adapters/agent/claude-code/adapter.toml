@@ -1,0 +1,25 @@
+[adapter]
+name = "claude-code"
+kind = "agent"
+version = "0.1.0"
+description = "Claude Code 2.1.280 behind the agent contract: one Deno process per call, and the pre-tool hook's payload and refusal mapped below."
+entry = "main.ts"
+
+# Claude Code's pre-tool hook, as `fleet guard --adapter claude-code` reads it:
+# where the payload keeps the tool and the command, and the refusal it writes
+# back. It is the mapping fleet's built-in manifest carries
+# (controller/src/adapter/claude_code.hook.toml at tinyfleet 451a33d), value
+# for value, until fleet-x93d.2 deletes that one; fleet-jymr.7's CI diffs the
+# two.
+#
+# The guard acts on the shell tool alone, Bash; a payload naming any other
+# tool is nothing it judges. The refusal is the one decision a guard states: a
+# pre-tool hook that says anything else short-circuits Claude Code's whole
+# permission system, so letting a command through is printing nothing at all.
+# {reason} is filled with the reason as a JSON string, quotes included.
+[hook]
+shell_tool = "Bash"
+tool = "/tool_name"
+command = "/tool_input/command"
+cwd = "/cwd"
+deny = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{reason}}}'

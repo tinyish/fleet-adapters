@@ -1,0 +1,22 @@
+{
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1",
+    "@std/toml": "jsr:@std/toml@1"
+  },
+  "tasks": {
+    "types": "deno run --allow-run --allow-env=FLEET_BIN --allow-write=contract.json,contract.d.ts scripts/types.ts && deno fmt contract.d.ts",
+    "test": "deno test --allow-run --allow-read --allow-write --allow-env"
+  },
+  "fmt": {
+    "exclude": [
+      "contract.json"
+    ]
+  },
+  "lint": {
+    "rules": {
+      "tags": [
+        "recommended"
+      ]
+    }
+  }
+}
