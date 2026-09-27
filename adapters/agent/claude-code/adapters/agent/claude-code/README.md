@@ -504,3 +504,8 @@ fleet agent check --adapter "$PWD/main.ts" --live --model haiku
 ```sh
 fleet pack check adapters/agent/claude-code --over runtimes/ts
 ```
+
+CI runs all of these but the live check on every push, from a fleet-packs
+checkout, through `ci/check-claude-code.sh` at the repository's root, and the
+live check on demand and nightly through `ci/check-claude-code-live.sh`; the
+repository's README says how.

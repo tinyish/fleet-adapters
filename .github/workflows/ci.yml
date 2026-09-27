@@ -100,6 +100,25 @@ jobs:
       - name: "bd: the smoke ring and the doctor check"
         run: sh fleet-packs/ci/check-bd.sh smoke
 
+      # Offline: no claude is installed on this runner, and none runs. The
+      # live half is claude-code-live.yml, on demand and nightly.
+      - name: "claude-code: the pins hold"
+        run: sh fleet-packs/ci/check-claude-code.sh pins
+      - name: "claude-code: deno fmt --check"
+        run: sh fleet-packs/ci/check-claude-code.sh fmt
+      - name: "claude-code: deno lint"
+        run: sh fleet-packs/ci/check-claude-code.sh lint
+      - name: "claude-code: deno test"
+        run: sh fleet-packs/ci/check-claude-code.sh test
+      - name: "claude-code: deno task types, and git diff"
+        run: sh fleet-packs/ci/check-claude-code.sh types
+      - name: "claude-code: fleet pack check"
+        run: sh fleet-packs/ci/check-claude-code.sh pack-check
+      - name: "claude-code: fleet agent check, offline"
+        run: sh fleet-packs/ci/check-claude-code.sh agent-check
+      - name: "claude-code: fleet guard --adapter claude-code, through the installed pack"
+        run: sh fleet-packs/ci/check-claude-code.sh hook
+
       - name: "tiny: ci/check-tiny.sh"
         run: sh fleet-packs/ci/check-tiny.sh
       - name: "ts: ci/check-ts.sh"

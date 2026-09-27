@@ -12,8 +12,10 @@
 # MOVING THE PIN IS A COMMIT: this line, and whatever the checks then say.
 #
 # The other pins are not repeated here, each is read where it lives: Deno's
-# from runtimes/ts/pack.toml's [runtime] table, and bd's from the PINNED line
-# of adapters/store/bd/doctor/bd-version/run.sh (ci/pins.sh reads all three).
+# from runtimes/ts/pack.toml's [runtime] table, bd's from the PINNED line of
+# adapters/store/bd/doctor/bd-version/run.sh, and Claude Code's from the
+# SUPPORTED line of adapters/agent/claude-code/doctor/claude-code-version/run.sh
+# (ci/pins.sh reads all four).
 [fleet]
 source = "https://github.com/bembot90/tinyfleet"
 commit = "7fadcdeead2f1a9cc863984c833d2b1094459bf5"

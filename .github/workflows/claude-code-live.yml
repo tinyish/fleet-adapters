@@ -1,0 +1,218 @@
+# The claude-code pack against Claude Code itself: ci/check-claude-code-live.sh
+# on the Claude Code release the pack pins, tmux at the minimum the pinned
+# fleet declares, and fleet at versions.toml's commit. On demand and nightly,
+# NEVER ON A PUSH: it costs model turns, paid from the account whose login the
+# CLAUDE_CODE_LOGIN secret holds, on the model LIVE_MODEL names.
+#
+# Without that secret (a fork, or a login nobody set) the live job is
+# skipped, with a line saying why, and never red; so is a login that no
+# longer signs in. A red live run is read by a person: nothing files anything
+# on its own. Every run's log is kept as an artifact, the recorded
+# measurement a re-pin cites.
+#
+# macOS: the credential knob the pack rests on (lessons A11) was measured
+# against the macOS keychain only, so the login goes into a keychain made
+# for the run, where Claude Code looks for it.
+#
+# CLAUDE_CODE_LOGIN is one JSON object with two keys (README.md, "The live
+# check"): "credentials", the value of the keychain item "Claude
+# Code-credentials" as `security find-generic-password -s "Claude
+# Code-credentials" -w` prints it, and "oauthAccount", the same key of
+# ~/.claude.json, which launch copies into each seat's config dir.
+name: claude-code live
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 5 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-code-live
+  cancel-in-progress: false
+
+env:
+  # The cheapest model the account has, a vendor string passed through to
+  # every launch as given.
+  LIVE_MODEL: claude-haiku-4-5
+  # Every claude this workflow runs, the installer's included: an interactive
+  # 2.1.280 once updated itself and re-pointed its own link (fleet-rge6).
+  DISABLE_AUTOUPDATER: "1"
+
+jobs:
+  login:
+    runs-on: ubuntu-24.04
+    outputs:
+      present: ${{ steps.secret.outputs.present }}
+    steps:
+      - name: Is there a login?
+        id: secret
+        env:
+          LOGIN: ${{ secrets.CLAUDE_CODE_LOGIN }}
+        run: |
+          if [ -n "$LOGIN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "the CLAUDE_CODE_LOGIN secret is set; the live check runs"
+          else
+            line="The live check is skipped: this repository has no CLAUDE_CODE_LOGIN secret (a fork, or a login nobody set), and it starts Claude Code, which needs one."
+            echo "::notice title=claude-code live skipped::$line"
+            echo "$line" >> "$GITHUB_STEP_SUMMARY"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  live:
+    needs: login
+    if: needs.login.outputs.present == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Check out fleet-packs
+        uses: actions/checkout@v7
+        with:
+          path: fleet-packs
+
+      - name: Read the pins
+        id: pins
+        run: |
+          pins=$(sh fleet-packs/ci/pins.sh)
+          echo "$pins" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Install Deno ${{ steps.pins.outputs.deno }}
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ steps.pins.outputs.deno }}
+
+      - name: Fetch fleet at ${{ steps.pins.outputs.fleet_commit }}
+        id: fleet
+        run: |
+          git init --quiet fleet
+          git -C fleet fetch --quiet --depth 1 "${{ steps.pins.outputs.fleet_source }}" "${{ steps.pins.outputs.fleet_commit }}"
+          git -C fleet checkout --quiet FETCH_HEAD
+          test "$(git -C fleet rev-parse HEAD)" = "${{ steps.pins.outputs.fleet_commit }}"
+          # The tmux the live check runs on is the minimum the pinned fleet
+          # declares, read from its source.
+          tmux=$(sed -n 's/^pub const MINIMUM_TMUX: &str = "\(.*\)";$/\1/p' fleet/core/src/supported.rs)
+          if [ -z "$tmux" ]; then
+            echo "::error::the pinned fleet declares no MINIMUM_TMUX in core/src/supported.rs"
+            exit 1
+          fi
+          echo "tmux=$tmux" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the fleet binary
+        id: fleet-cache
+        uses: actions/cache@v6
+        with:
+          path: fleet-bin
+          key: fleet-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.fleet_commit }}
+
+      - name: Install Rust
+        if: steps.fleet-cache.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build fleet
+        if: steps.fleet-cache.outputs.cache-hit != 'true'
+        run: |
+          cargo build --release --locked -p fleet-cli --manifest-path fleet/Cargo.toml
+          mkdir -p fleet-bin
+          cp fleet/target/release/fleet fleet-bin/fleet
+
+      - name: Install tmux ${{ steps.fleet.outputs.tmux }}
+        run: |
+          # Linked where the image's tmux is that release, else built from
+          # the release tarball, which needs these.
+          brew list --versions libevent ncurses utf8proc pkgconf >/dev/null 2>&1 ||
+            brew install libevent ncurses utf8proc pkgconf
+          sh fleet-packs/ci/install-tmux.sh "${{ steps.fleet.outputs.tmux }}" "$RUNNER_TEMP/tmux"
+          echo "$RUNNER_TEMP/tmux" >> "$GITHUB_PATH"
+
+      # The claude-code-version doctor check's own fresh-install line
+      # (adapters/agent/claude-code/doctor/claude-code-version/run.sh, FRESH).
+      - name: Install Claude Code ${{ steps.pins.outputs.claude_code }}
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash -s "${{ steps.pins.outputs.claude_code }}"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Name what the checks run against
+        run: |
+          {
+            echo "FLEET_BIN=$GITHUB_WORKSPACE/fleet-bin/fleet"
+            echo "FLEET_LIVE_LOG=$RUNNER_TEMP/live-log"
+            echo "FLEET_LIVE_TMUX=${{ steps.fleet.outputs.tmux }}"
+            echo "FLEET_LIVE_MODEL=$LIVE_MODEL"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/live-log"
+          # A freshly linked binary's first run on macOS can wait on the
+          # system's policy check; take that wait here, timed.
+          time "$GITHUB_WORKSPACE/fleet-bin/fleet" --version
+
+      # A keychain made for this run, first in the search list and unlocked,
+      # holding the login under the service name Claude Code reads for the
+      # default config dir; and ~/.claude.json with the three onboarding keys
+      # launch copies into each seat's config dir.
+      - name: Sign in from CLAUDE_CODE_LOGIN
+        id: login
+        env:
+          LOGIN: ${{ secrets.CLAUDE_CODE_LOGIN }}
+          PINNED: ${{ steps.pins.outputs.claude_code }}
+        run: |
+          credentials=$(printf '%s' "$LOGIN" | deno eval --quiet '
+            const login = JSON.parse(await new Response(Deno.stdin.readable).text());
+            const c = login.credentials;
+            console.log(typeof c === "string" ? c : JSON.stringify(c));
+          ')
+          echo "::add-mask::$credentials"
+          keychain="$RUNNER_TEMP/claude-code-live.keychain-db"
+          password=$(openssl rand -hex 24)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          # The search list's own entries, one word each, after the new one.
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$keychain"
+          security add-generic-password -U -a "$USER" -s "Claude Code-credentials" -w "$credentials" "$keychain"
+          printf '%s' "$LOGIN" | deno eval --quiet '
+            const login = JSON.parse(await new Response(Deno.stdin.readable).text());
+            if (!login.oauthAccount) throw new Error("CLAUDE_CODE_LOGIN carries no oauthAccount");
+            const file = Deno.env.get("HOME") + "/.claude.json";
+            await Deno.writeTextFile(file, JSON.stringify({
+              hasCompletedOnboarding: true,
+              lastOnboardingVersion: Deno.env.get("PINNED"),
+              oauthAccount: login.oauthAccount,
+            }), { mode: 0o600 });
+          '
+          if claude auth status | grep -q '"loggedIn": *true'; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+            echo "signed in from CLAUDE_CODE_LOGIN"
+          else
+            line="The live check is skipped: CLAUDE_CODE_LOGIN is set, but Claude Code does not read it as signed in (a lapsed or malformed login)."
+            echo "::notice title=claude-code live skipped::$line"
+            echo "$line" >> "$GITHUB_STEP_SUMMARY"
+            echo "live=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "claude-code live: the pins hold"
+        if: steps.login.outputs.live == 'true'
+        run: sh fleet-packs/ci/check-claude-code-live.sh pins
+      - name: "claude-code live: fleet agent check --live"
+        if: steps.login.outputs.live == 'true'
+        run: sh fleet-packs/ci/check-claude-code-live.sh agent-check
+      - name: "claude-code live: fleet doctor, from the pack"
+        if: steps.login.outputs.live == 'true'
+        run: sh fleet-packs/ci/check-claude-code-live.sh doctor
+      - name: "claude-code live: the pin held"
+        if: steps.login.outputs.live == 'true'
+        env:
+          FLEET_LIVE_SETTLE: "120"
+        run: sh fleet-packs/ci/check-claude-code-live.sh pin-held
+
+      - name: Keep the log
+        if: always() && steps.login.outputs.live == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: claude-code-live-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/live-log
+          retention-days: 90
+          if-no-files-found: warn

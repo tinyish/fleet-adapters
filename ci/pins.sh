@@ -7,6 +7,8 @@
 #   fleet_commit=<sha>       versions.toml [fleet] commit
 #   deno=<version>           runtimes/ts/pack.toml [runtime] version
 #   bd=<version>             adapters/store/bd/doctor/bd-version/run.sh PINNED
+#   claude_code=<version>    adapters/agent/claude-code/doctor/claude-code-version/run.sh
+#                            SUPPORTED, the copy of the adapter's pin its suite holds
 #
 # A pin that does not read is an error, never an empty value.
 
@@ -45,3 +47,4 @@ pin fleet_source "$(key "$root/versions.toml" fleet source)" "versions.toml name
 pin fleet_commit "$(key "$root/versions.toml" fleet commit)" "versions.toml names no [fleet] commit"
 pin deno "$(key "$root/runtimes/ts/pack.toml" runtime version)" "runtimes/ts/pack.toml names no [runtime] version"
 pin bd "$(sed -n 's/^PINNED=//p' "$root/adapters/store/bd/doctor/bd-version/run.sh")" "the bd-version check carries no PINNED line"
+pin claude_code "$(sed -n 's/^SUPPORTED=//p' "$root/adapters/agent/claude-code/doctor/claude-code-version/run.sh")" "the claude-code-version check carries no SUPPORTED line"
