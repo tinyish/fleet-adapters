@@ -1,0 +1,22 @@
+description = "Whether the Claude Code this pack's adapter runs is the release the adapter was measured against."
+run = "run.sh"
+
+# No name key: the directory is the name, which is the shape the reference's
+# packs use.
+#
+# THE PIN IS THIS PACK'S: every "measured on" claim in the adapter beside it
+# (adapters/agent/claude-code/, capabilities' `measured`, lib/capabilities.ts
+# PINNED) was taken on that one release, so the pin moves with the adapter, in
+# one commit of this repository, and never with the fleet binary. It came from
+# tinyfleet's core/defaults/doctor/claude-code-version (fleet-jymr.2, as
+# fleet-rsia.5 moved bd-version). fleet doctor finds this entry through the
+# installed packs like any pack's check: it resolves doctor/claude-code-version/
+# per file, the highest layer first, so while the binary's defaults still carry
+# a check of the same name this one replaces it, and the row names this pack as
+# its layer. The defaults' copy goes in fleet-x93d.2.
+#
+# What it is for: fleet reads every seat through Claude Code — its listing,
+# its transcripts, its version — by shapes observed on the pinned release, and
+# none of them is a published contract. A Claude Code at another version still
+# runs and is still read, and this entry is where a person is told those
+# shapes were not measured on it, with the line that installs the pinned one.

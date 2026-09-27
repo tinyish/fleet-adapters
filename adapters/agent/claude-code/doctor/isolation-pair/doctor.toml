@@ -1,0 +1,19 @@
+description = "Whether the two Claude Code knobs still isolate a spawned seat's config dir without logging it out."
+run = "run.sh"
+
+# No name key: the directory is the name, which is the shape the reference's
+# packs use.
+#
+# WHOLLY CLAUDE CODE'S, so it is this pack's: it came from tinyfleet's
+# core/defaults/doctor/isolation-pair (fleet-jymr.2), and the defaults' copy
+# goes in fleet-x93d.2. While both are installed, this one — the higher layer —
+# replaces it, and the row names this pack.
+#
+# A spawned seat's own config dir scopes Claude Code's listing, and the
+# credential store's service name takes a suffix derived from the same
+# directory — so a scratch dir is logged out unless the credential knob is
+# defined and empty beside it (lessons claude-code A11). The adapter sets both
+# on every seat it launches (lib/claude.ts sessionEnv). That pairing is
+# UNDOCUMENTED and therefore measured at every upgrade rather than trusted, and
+# this entry is the measurement. A release that changes either half removes a
+# flight's isolation silently: the seats come up and every first turn fails.

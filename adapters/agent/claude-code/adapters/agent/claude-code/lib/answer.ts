@@ -69,6 +69,14 @@ export type Handlers = { [V in Verb]?: Handler<V> };
 export interface Declared {
   /** Whether capabilities declares `context`; asked where it does not, 2. */
   context: boolean;
+  /**
+   * Run on the parsed request BEFORE the schema reads it, throwing `Refused`
+   * for what the adapter will not take even though the schema would call it
+   * malformed: a posture outside the three is refused, exit 1, naming it
+   * (ruling 14; lib/posture.ts), where the contract's enum alone makes it
+   * usage.
+   */
+  refuses?: (verb: string, request: unknown) => void;
 }
 
 /** One call's ending: the exit, what stdout carries, and stderr's line. */
@@ -164,6 +172,7 @@ export async function respond(
         }`,
       );
     }
+    declared.refuses?.(verb, request);
     const refused = why(CONTRACT, CONTRACT.verbs[verb].request, request);
     if (refused !== null) {
       throw new Usage(

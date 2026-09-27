@@ -210,6 +210,46 @@ Deno.test("context undeclared is usage, exit 2, before any handler runs", async 
   assertStringIncludes(outcome.stderr ?? "", "declares no context");
 });
 
+/**
+ * A declared refusal runs on the parsed request BEFORE the schema reads it,
+ * so a word the schema's enum would make usage is refused, exit 1, as ruling
+ * 14 has a posture outside the three; what it lets through is still held to
+ * the schema.
+ */
+Deno.test("a declared refusal runs before the schema, and its refusal is exit 1", async () => {
+  const asked: unknown[] = [];
+  const declared = {
+    context: true,
+    refuses: (verb: string, request: unknown) => {
+      asked.push([verb, request]);
+      if ((request as { posture?: unknown }).posture === "plan") {
+        throw new Refused("unsupported", "no posture plan");
+      }
+    },
+  };
+  const refused = await respond(
+    "launch",
+    JSON.stringify({ ...LAUNCH, posture: "plan" }),
+    handlers,
+    declared,
+  );
+  assertEquals(refused.exit, 1);
+  assertEquals(refused.stdout, {
+    schema_version: 1,
+    refused: { reason: "unsupported", message: "no posture plan" },
+  });
+  const malformed = await respond(
+    "launch",
+    JSON.stringify({ ...LAUNCH, env: { FLEET_ACTOR: 7 } }),
+    handlers,
+    declared,
+  );
+  assertEquals(malformed.exit, 2);
+  const unparsed = await respond("launch", "{not json", handlers, declared);
+  assertEquals(unparsed.exit, 2);
+  assertEquals(asked.length, 2, "an unparsed request is refused nothing");
+});
+
 /** A message on more than one line is one line on stderr and in the answer. */
 Deno.test("stderr's line is one line", async () => {
   const outcome = await respond("version", BARE, {

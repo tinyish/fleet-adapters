@@ -1,10 +1,11 @@
 // Claude Code as this adapter runs it: which binary, and one bounded run of
 // it under a config dir and a credential scope. Ported from tinyfleet's
 // in-process adapter (controller/src/adapter/claude_code.rs at 451a33d):
-// resolve_effect_bin's rule for the binary, and with_environment's two
-// variables for the scope.
+// resolve_effect_bin's rule for the binary, and agent_environment's three
+// variables for the scope and the auto-updater.
 //
-// THE ENVIRONMENT IS INHERITED, and two variables are set over it. fleet runs
+// THE ENVIRONMENT IS INHERITED, and three variables are set over it
+// (sessionEnv, below). fleet runs
 // this adapter under its own environment, as the store's exec does
 // (Reviewer call 2026-09-25), so PATH, HOME and the rest reach claude from
 // there; the per-seat values travel in the request. A launched session's
@@ -38,6 +39,28 @@ export interface Scope {
    * config dir, which is the logged-out child (lessons claude-code A11).
    */
   credentialDir: string;
+}
+
+/** The variable that turns Claude Code's own auto-updater off. */
+export const AUTOUPDATER = "DISABLE_AUTOUPDATER";
+
+/**
+ * The three variables every claude this pack names carries — a run of its
+ * own, and a launched or resumed seat's pane alike (verbs/launch.ts,
+ * verbs/resume.ts) — so the listing that reads a session and the pane that
+ * holds it agree on each: the config dir, the credential scope DEFINED EVEN
+ * WHEN EMPTY, and the auto-updater OFF. An interactive 2.1.280 installed a
+ * newer release and re-pointed the operator's own claude during
+ * fleet-rge6.2's measurement (the incident noted on fleet-rge6): a seat, or a
+ * read, must not move the pin under the person (lessons claude-code A1; the
+ * in-process ClaudeCode::agent_environment at tinyfleet 807107b).
+ */
+export function sessionEnv(scope: Scope): Record<string, string> {
+  return {
+    CLAUDE_CONFIG_DIR: scope.configDir,
+    CLAUDE_SECURESTORAGE_CONFIG_DIR: scope.credentialDir,
+    [AUTOUPDATER]: "1",
+  };
 }
 
 /** One run's result, as the process left it. */
@@ -105,7 +128,7 @@ async function within<T>(
 
 /**
  * One run of `argv` — the binary first, as claudeBin() chose it — under
- * `scope`, stdin closed, both streams read whole, and killed where it has
+ * `scope` with the auto-updater off (sessionEnv), stdin closed, both streams read whole, and killed where it has
  * not ended within `boundMs`.
  *
  * A CLAUDE THAT CANNOT BE RUN — not found, not permitted — or one that
@@ -123,10 +146,7 @@ export async function run(
   try {
     child = new Deno.Command(bin, {
       args,
-      env: {
-        CLAUDE_CONFIG_DIR: scope.configDir,
-        CLAUDE_SECURESTORAGE_CONFIG_DIR: scope.credentialDir,
-      },
+      env: sessionEnv(scope),
       stdin: "null",
       stdout: "piped",
       stderr: "piped",

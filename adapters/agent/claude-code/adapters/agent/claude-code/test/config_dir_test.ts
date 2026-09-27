@@ -106,6 +106,36 @@ Deno.test("writeInside: a replaced file keeps its mode", async () => {
   assertEquals((await Deno.stat(path)).mode! & 0o777, 0o600);
 });
 
+/**
+ * A mode named is the file's whatever it had, and the file is never wider
+ * on its way there: the seed's .claude.json carries the operator's
+ * oauthAccount (fleet-jymr.1's hand-off).
+ */
+Deno.test("writeInside: a named mode is the file's, new or replaced", async () => {
+  await using s = await scratch();
+  const path = `${s.configDir}/.claude.json`;
+  const roots = { configDir: s.configDir };
+  await writeInside(roots, path, "{}", 0o600);
+  assertEquals((await Deno.stat(path)).mode! & 0o777, 0o600);
+  await Deno.chmod(path, 0o644);
+  await writeInside(roots, path, "{}", 0o600);
+  assertEquals((await Deno.stat(path)).mode! & 0o777, 0o600);
+  assertEquals(
+    [...Deno.readDirSync(s.configDir)].map((e) => e.name),
+    [".claude.json"],
+  );
+});
+
+/** The config dir alone is a root: a seed names no worktree. */
+Deno.test("writeInside: with no worktree, the config dir alone is a root", async () => {
+  await using s = await scratch();
+  await writeInside({ configDir: s.configDir }, `${s.configDir}/f`, "x");
+  await assertRejects(
+    () => writeInside({ configDir: s.configDir }, `${s.worktree}/f`, "x"),
+    CouldNotTell,
+  );
+});
+
 Deno.test("writeInside: a path outside both roots is refused, and nothing is written", async () => {
   await using s = await scratch();
   const roots = { configDir: s.configDir, worktree: s.worktree };

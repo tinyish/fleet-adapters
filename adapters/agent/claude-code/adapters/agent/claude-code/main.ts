@@ -25,8 +25,8 @@
 //                        `claude` on PATH otherwise.
 //   --allow-read, --allow-write
 //                        the operator's .claude.json is read and the seat's
-//                        config dir and worktree written (fleet-jymr.2,
-//                        fleet-jymr.5), and the transcripts read
+//                        config dir seeded (fleet-jymr.2) and its worktree
+//                        written (fleet-jymr.5), and the transcripts read
 //                        (fleet-jymr.4). Those directories are named by the
 //                        request, and Deno 2.9.7 narrows no grant after it
 //                        starts (fleet-rsia.2 measured it), so both are
@@ -50,19 +50,22 @@
 
 import { emit, type Handlers, respond } from "./lib/answer.ts";
 import { CAPABILITIES } from "./lib/capabilities.ts";
+import { refusedPosture } from "./lib/posture.ts";
 import { capabilities } from "./verbs/capabilities.ts";
 import { context } from "./verbs/context.ts";
+import { launch } from "./verbs/launch.ts";
 import { read } from "./verbs/read.ts";
+import { resume } from "./verbs/resume.ts";
+import { version } from "./verbs/version.ts";
 
-/**
- * Every verb this pack answers, each from verbs/<verb>.ts. A verb of the
- * contract no file here answers yet — version, launch and resume
- * (fleet-jymr.2) — is usage, exit 2.
- */
+/** Every verb of the contract, each answered from verbs/<verb>.ts. */
 export const HANDLERS: Handlers = {
   capabilities,
   context,
+  launch,
   read,
+  resume,
+  version,
 };
 
 if (import.meta.main) {
@@ -71,6 +74,7 @@ if (import.meta.main) {
     await emit(
       await respond(Deno.args[0], stdin, HANDLERS, {
         context: CAPABILITIES.context ?? false,
+        refuses: refusedPosture,
       }),
     ),
   );

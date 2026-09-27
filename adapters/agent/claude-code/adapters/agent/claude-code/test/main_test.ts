@@ -1,8 +1,8 @@
 // main.ts end to end: the executable itself, run as fleet runs it — one
 // process per call, the request on stdin, the answer on stdout, the exit by
 // the contract's table, and stderr's last line for people. No arm here runs
-// Claude Code: capabilities runs none, and context's and read's own arms are
-// test/context_test.ts and test/read_test.ts.
+// Claude Code: capabilities runs none, and each other verb's own arms are
+// its test file's (test/<verb>_test.ts).
 
 import { assert, assertEquals } from "@std/assert";
 import { CONTRACT } from "../lib/answer.ts";
@@ -63,23 +63,6 @@ Deno.test("capabilities answers the declaration in the envelope, exit 0", async 
   );
 });
 
-/**
- * Every verb the contract names but capabilities, context and read is
- * unfilled:
- * exit 2, nothing on stdout, and stderr's last line naming the verb — never
- * a crash, so fleet agent check reports each as failing and goes on.
- */
-Deno.test("the unfilled verbs are usage, exit 2, naming the verb", async () => {
-  for (const verb of ["version", "launch", "resume"]) {
-    const called = await call(verb, request());
-    assertEquals([called.exit, called.answer], [2, undefined], verb);
-    assertEquals(
-      called.stderr.split("\n").at(-1),
-      `the claude-code pack does not answer \`${verb}\` yet`,
-    );
-  }
-});
-
 Deno.test("an unknown verb and another schema_version are usage, exit 2", async () => {
   const unknown = await call("frobnicate", request());
   assertEquals([unknown.exit, unknown.answer], [2, undefined]);
@@ -125,6 +108,10 @@ Deno.test("the first two lines hand Deno the grant, the seam's path included", a
   assertEquals(seamed.exit, 0, seamed.stderr);
 });
 
-Deno.test("HANDLERS answers capabilities, context and read, and nothing still unfilled", () => {
-  assertEquals(Object.keys(HANDLERS), ["capabilities", "context", "read"]);
+/** Every verb of the contract has its handler: nothing is left unfilled. */
+Deno.test("HANDLERS answers every verb the contract names", () => {
+  assertEquals(
+    Object.keys(HANDLERS).sort(),
+    Object.keys(CONTRACT.verbs).sort(),
+  );
 });

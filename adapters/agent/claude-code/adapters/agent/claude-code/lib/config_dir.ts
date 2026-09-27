@@ -58,12 +58,12 @@ export function credentialDir(env: Env = PROCESS): string {
   return set(env(CONFIG_DIR_VAR)) ?? "";
 }
 
-/** The directories one call may write in. */
+/** The directories one call may write in: at least one of the two. */
 export interface Roots {
   /** The request's config_dir; a named seat has none, and so no such root. */
   configDir?: string | null;
-  /** The seat's worktree. */
-  worktree: string;
+  /** The seat's worktree; a seed of the config dir names none (lib/seed.ts). */
+  worktree?: string | null;
 }
 
 /** An absolute path's segments; `undefined` where one is empty, `.` or `..`. */
@@ -154,16 +154,28 @@ function inside(path: string, root: string): boolean {
  * relatively is usage: fleet never sends one.
  *
  * The file is written beside itself and renamed over, so a claude reading it
- * never reads half of it, and a file already there keeps its mode.
+ * never reads half of it, and a file already there keeps its mode — unless
+ * `mode` names one, which the file then has whatever it had, and which the
+ * file beside it is made with, so it is never wider on its way there: the
+ * seed's .claude.json carries the operator's oauthAccount (lib/seed.ts).
  */
 export async function writeInside(
   roots: Roots,
   path: string,
   body: string,
+  mode?: number,
 ): Promise<void> {
-  const named: [string, string][] = [["worktree", roots.worktree]];
+  const named: [string, string][] = [];
   if (set(roots.configDir) !== undefined) {
-    named.unshift(["config_dir", roots.configDir!.trim()]);
+    named.push(["config_dir", roots.configDir!.trim()]);
+  }
+  if (set(roots.worktree) !== undefined) {
+    named.push(["worktree", roots.worktree!.trim()]);
+  }
+  if (named.length === 0) {
+    throw new Usage(
+      `refusing to write \`${path}\`: the request names no config_dir and no worktree`,
+    );
   }
   const parts = segments(path);
   const refuse = (why: string) =>
@@ -200,16 +212,22 @@ export async function writeInside(
   }
   const dir = path.slice(0, path.lastIndexOf("/")) || "/";
   await Deno.mkdir(dir, { recursive: true });
-  let mode: number | undefined;
-  try {
-    mode = ((await Deno.stat(path)).mode ?? undefined) as number | undefined;
-  } catch (error) {
-    if (!missing(error)) throw error;
+  let kept = mode;
+  if (kept === undefined) {
+    try {
+      kept = ((await Deno.stat(path)).mode ?? undefined) as number | undefined;
+    } catch (error) {
+      if (!missing(error)) throw error;
+    }
   }
   const temporary = `${path}.${Deno.pid}.writing`;
-  await Deno.writeTextFile(temporary, body);
+  await Deno.writeTextFile(
+    temporary,
+    body,
+    mode === undefined ? undefined : { mode: mode & 0o777 },
+  );
   try {
-    if (mode !== undefined) await Deno.chmod(temporary, mode & 0o7777);
+    if (kept !== undefined) await Deno.chmod(temporary, kept & 0o7777);
     await Deno.rename(temporary, path);
   } catch (error) {
     await Deno.remove(temporary).catch(() => undefined);

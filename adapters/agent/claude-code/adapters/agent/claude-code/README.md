@@ -17,9 +17,13 @@ The pack is `adapters/agent/claude-code/` in this repository, and the paths
 below are the pack's. This file sits in the adapter's own directory because a
 pack's top level holds `pack.toml` and the eight slots and nothing else.
 
-**Status:** the pack answers `capabilities`, `context` and `read`. `version`,
-`launch` and `resume` answer exit 2, usage, naming the verb, until the row that
-fills them lands.
+**Status:** the pack answers all six verbs. `launch` loads the pack's own plugin
+directory, `plugin/` beside `main.ts`, which the row that carries fleet's Claude
+Code plugin fills; until then the directory is not there, and Claude Code
+2.1.280 starts all the same. That row also renders the launch's permissions.
+
+The pack also carries two doctor checks, `doctor/claude-code-version/` and
+`doctor/isolation-pair/`, which `fleet doctor` lists from the installed pack.
 
 ## What it needs
 
@@ -27,9 +31,14 @@ fills them lands.
 - **Deno 2.9.7**, which the ts pack pins. This pack imports ts rather than
   pinning a runtime of its own, and `fleet pack add` installs the two together.
 
-Both are found on the `PATH` fleet runs the adapter with, which is fleet's own
-environment. Where a service's environment does not carry the directory Claude
-Code is installed in, name it with `FLEET_CLAUDE_BIN` (below).
+- **The operator's own Claude Code login**, for a spawned seat: `launch` copies
+  the onboarding keys from `$CLAUDE_CONFIG_DIR/.claude.json`, or
+  `~/.claude.json` where that variable is not set (see
+  [What `launch` answers](#what-launch-answers)).
+
+Claude Code and Deno are found on the `PATH` fleet runs the adapter with, which
+is fleet's own environment. Where a service's environment does not carry the
+directory Claude Code is installed in, name it with `FLEET_CLAUDE_BIN` (below).
 
 ## Installing it
 
@@ -79,6 +88,74 @@ deno run --no-config --no-prompt --quiet --allow-run=<claude> --allow-read --all
 | `--no-config`                                         | Deno would otherwise read a `deno.json` beside the script or above it, and a checkout's config would change the adapter's imports.                                                                                                                                                                                                                                                                                |
 | `--no-prompt`                                         | A permission the grant lacks is refused, never asked for on a terminal.                                                                                                                                                                                                                                                                                                                                           |
 | `--quiet`                                             | Deno's own notes stay off stderr, whose last line is for people: without it, `--allow-run=claude` with no `claude` on `PATH` prints a note on every call.                                                                                                                                                                                                                                                         |
+
+## What `version` answers
+
+`version` runs `claude --version` and answers `{"name": "claude", "version": …}`
+with the first word it printed, such as `2.1.280`. `version` is `null` where
+claude cannot be run, `FLEET_CLAUDE_BIN` names no executable, claude exits
+non-zero or prints nothing, or it has not answered within 10 seconds. A `null`
+is still an answer, exit 0. Whether the version is one the pack was measured
+against is fleet's to compare, with `measured` in `capabilities`.
+
+## What `launch` answers
+
+`launch` answers the seat's session as the command of the seat's tmux pane,
+`argv`, and the variables of its environment, `env`. The session is an
+interactive Claude Code:
+
+```text
+<claude> --name <name> --model <model> --permission-mode <mode> --plugin-dir <plugin> <first turn>
+```
+
+- `<claude>` is `$FLEET_CLAUDE_BIN`, or `claude`.
+- `<mode>` is the posture's: `ask` is `default`, `auto` is `auto`, and
+  `unattended` is `dontAsk`. A launch or resume with any other posture is
+  refused, exit 1, `unsupported`, naming the word and the three.
+- `<plugin>` is the pack's own `plugin/` directory, beside `main.ts`. A request
+  never names it.
+- The model and the posture are always named: on Claude Code 2.1.280 a start
+  that names neither comes up on Opus 5.5, in auto mode.
+
+`env` is the request's `env` with three variables over it:
+
+| Variable                          | Value                                                                                                                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE_CONFIG_DIR`               | The seat's `config_dir`, or for a seat without one, the operator's: `CLAUDE_CONFIG_DIR`, else `~/.claude`. It is the directory `read` lists the seat under.                                                                                       |
+| `CLAUDE_SECURESTORAGE_CONFIG_DIR` | `CLAUDE_CONFIG_DIR` as fleet's environment carries it, and set but empty where it carries none. Claude Code looks up the login by this variable, and an unset one looks it up under a name taken from the seat's config dir, which is logged out. |
+| `DISABLE_AUTOUPDATER`             | `1`, so no seat upgrades Claude Code under the operator. Every claude the adapter runs itself carries it too.                                                                                                                                     |
+
+**A spawned seat's config dir is seeded** before `launch` answers, because an
+interactive Claude Code under an empty config dir stops at the theme picker and
+the login menu, and at the question whether to trust the worktree, before any
+session exists. `launch` writes `<config_dir>/.claude.json`, mode `0600`, merged
+into any file already there:
+
+- `hasCompletedOnboarding`, `lastOnboardingVersion` and `oauthAccount`, copied
+  from the operator's own `.claude.json`, and `theme` where that file has one. A
+  file missing one of the three is could not tell, exit 3, naming the key, and
+  nothing is written. Nothing else of the operator's is copied.
+- `projects.<worktree>.hasTrustDialogAccepted: true`, for the seat's own
+  worktree, resolved through any symlink, and for no other directory.
+
+A seat without a `config_dir` is one fleet did not make the worktree of, so
+`launch` writes nothing for it: no seed, and no trust. Every write goes through
+`writeInside`, and a config dir that is itself a symlink is refused, exit 3.
+
+## What `resume` answers
+
+`resume` answers a new pane's command that resumes the seat's session by its
+full id, with the start's model, posture and plugin:
+
+```text
+<claude> --resume <session id> --model <model> --permission-mode <mode> --plugin-dir <plugin>
+```
+
+`env` is the same three variables `launch` answers. Measured on Claude Code
+2.1.280, a session resumed this way comes back under the same session id, name,
+model, posture and transcript. `resume` writes nothing, and does not ask Claude
+Code whether it has the session; a blank session id is refused, exit 1,
+`missing`.
 
 ## What `context` answers
 
@@ -204,6 +281,22 @@ changed.
 | `zero-bytes`            | Derived: zero bytes and exit 0, the unreadable listing of lessons B4, seen on a release nobody recorded, which cannot be made on demand.                                            |
 | `one-dir-fails`         | Three config dirs: the `two-rows-one-worktree` listing, a second dir's own recorded session, and a derived listing that exits 1. A seat is seen only through its own dir's listing. |
 
+## The doctor checks
+
+`fleet doctor` lists both from the installed pack, in place of the copies
+fleet's own defaults carry. Each runs the claude the adapter runs:
+`$FLEET_CLAUDE_BIN`, or the first `claude` on `PATH`. A `FLEET_CLAUDE_BIN` that
+is not an absolute path is broken, as the adapter refuses it.
+
+- `claude-code-version` holds when `claude --version` answers `2.1.280`, the
+  last entry of `measured`, and is broken, with the line that installs it, when
+  it answers another version or does not answer. The suite holds its copy of the
+  version equal to `measured`'s.
+- `isolation-pair` asks `claude auth status` under a scratch config dir twice:
+  with `CLAUDE_SECURESTORAGE_CONFIG_DIR` set but empty, which must be logged in,
+  and with it unset, which must be logged out. It holds when both answer so. It
+  starts no session.
+
 ## The contract's types
 
 `contract.json` is `fleet agent schema`'s output, byte for byte, and
@@ -229,8 +322,18 @@ FLEET_BIN=/path/to/fleet deno task test
 With `FLEET_BIN` set, one arm runs `fleet guard` over sample payloads with this
 adapter's directory and with no flag, and holds the two refusals to the same
 bytes; without it that arm is ignored. No arm runs Claude Code: `context`'s arms
-read the recorded transcripts, and `read`'s replay the recorded listings through
-`fixtures/read/claude`.
+read the recorded transcripts, `read`'s replay the recorded listings through
+`fixtures/read/claude`, and every other claude is a script the arm writes.
+
+`fleet agent check` over the adapter, offline, and against Claude Code itself. A
+`launch` seeds its scratch config dir from `~/.claude.json`, so the offline
+check needs one carrying the three onboarding keys; the live one costs model
+turns:
+
+```sh
+fleet agent check --adapter "$PWD/main.ts"
+fleet agent check --adapter "$PWD/main.ts" --live --model haiku
+```
 
 `fleet pack check` over the pack, resolved above ts:
 

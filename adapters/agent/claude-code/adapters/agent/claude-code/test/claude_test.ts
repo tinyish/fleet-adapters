@@ -10,7 +10,7 @@ import {
   assertThrows,
 } from "@std/assert";
 import { CouldNotTell } from "../lib/answer.ts";
-import { CLAUDE, claudeBin, run } from "../lib/claude.ts";
+import { CLAUDE, claudeBin, run, sessionEnv } from "../lib/claude.ts";
 
 /** An executable script at `<dir>/<name>` holding `body` after its shebang. */
 async function script(dir: string, name: string, body: string) {
@@ -108,6 +108,40 @@ Deno.test("run: the child carries the config dir and the credential scope, empty
       5_000,
     );
     assertEquals(named.stdout, "|config=/c|cred=set:/home/op/.claude-work");
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+/**
+ * Every child the pack runs carries the auto-updater off, whatever fleet's
+ * environment says: an interactive 2.1.280 installed a newer release and
+ * re-pointed the operator's claude during fleet-rge6.2's measurement (the
+ * INCIDENT on fleet-rge6), and the pack's reads are children too
+ * (fleet-jymr.1's reviewer call).
+ */
+Deno.test("run: the child carries DISABLE_AUTOUPDATER=1, over fleet's own", async () => {
+  const dir = await Deno.makeTempDir();
+  try {
+    const claude = await script(
+      dir,
+      "claude",
+      'printf "%s:%s" "${DISABLE_AUTOUPDATER+set}" "$DISABLE_AUTOUPDATER"',
+    );
+    const ran = await run(
+      [claude],
+      { configDir: "/c", credentialDir: "" },
+      5_000,
+    );
+    assertEquals(ran.stdout, "set:1");
+    assertEquals(
+      sessionEnv({ configDir: "/c", credentialDir: "" }),
+      {
+        CLAUDE_CONFIG_DIR: "/c",
+        CLAUDE_SECURESTORAGE_CONFIG_DIR: "",
+        DISABLE_AUTOUPDATER: "1",
+      },
+    );
   } finally {
     await Deno.remove(dir, { recursive: true });
   }
