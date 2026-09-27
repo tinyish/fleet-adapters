@@ -16,17 +16,26 @@
 // operator's own for a named seat, as read runs its listing under; the
 // credential scope, defined even when empty (A11); the auto-updater off.
 //
-// THE WRITES come first, inside the request's config dir and nowhere else
-// (E8): a spawned seat's config dir is seeded with onboarding and its own
-// worktree's trust (lib/seed.ts; ruling 13). A named seat carries no config
-// dir and is seeded with nothing. The permission file rendered from the
-// request's neutral permissions is fleet-jymr.5's (lib/permissions.ts), and
-// lands in the worktree; until it does, launch writes none.
+// THE WRITES come first, inside the request's config dir and the seat's
+// worktree and nowhere else (E8): a spawned seat's config dir is seeded with
+// onboarding and its own worktree's trust (lib/seed.ts; ruling 13), and the
+// request's neutral permissions are rendered into the worktree's
+// .claude/settings.local.json, merged into any file standing there
+// (lib/permissions.ts) — before the start, because Claude Code reads the file
+// once, as it comes up. Everything that can refuse is asked before the first
+// byte: the render, and the read of the standing file. A named seat carries
+// no config dir: its worktree is a person's checkout, so it is seeded with
+// nothing and no rules are rendered into it.
 
 import type { Handler } from "../lib/answer.ts";
 import { claudeBin, SEAM, sessionEnv } from "../lib/claude.ts";
 import { configDirFor, credentialDir, type Env } from "../lib/config_dir.ts";
 import { pluginDir } from "../lib/plugin.ts";
+import {
+  renderPermissions,
+  settingsFor,
+  writeSettings,
+} from "../lib/permissions.ts";
 import { flagFor } from "../lib/posture.ts";
 import { seedOnboarding, seedTrust } from "../lib/seed.ts";
 
@@ -44,8 +53,13 @@ export function launchWith(env: Env = PROCESS): Handler<"launch"> {
     };
     const seatDir = request.config_dir?.trim() ?? "";
     if (seatDir !== "") {
+      const settings = await settingsFor(
+        request.worktree,
+        renderPermissions(request.permissions, request.worktree),
+      );
       await seedOnboarding(seatDir, env);
       await seedTrust(seatDir, request.worktree);
+      await writeSettings(settings);
     }
     return {
       argv: [

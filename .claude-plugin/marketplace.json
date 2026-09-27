@@ -1,0 +1,14 @@
+{
+  "name": "fleet",
+  "owner": {
+    "name": "the fleet maintainers"
+  },
+  "description": "The marketplace fleet-packs publishes: one plugin, fleet, which the claude-code pack carries.",
+  "plugins": [
+    {
+      "name": "fleet",
+      "source": "./adapters/agent/claude-code/adapters/agent/claude-code/plugin",
+      "description": "The fleet binary, its guards, its session prime and the tiny pack's rituals, wired into a Claude Code session."
+    }
+  ]
+}

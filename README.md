@@ -18,6 +18,7 @@ format, and how packs layer, import and shadow one another, is fleet's
 | `runtimes/ts/`             | the TypeScript layer: Deno pinned as the workflow runtime, and the workflow SDK under `assets/sdk`.  |
 | `adapters/store/`          | one pack per store adapter, each in a directory named for the store.                                 |
 | `adapters/agent/`          | one pack per agent adapter, each in a directory named for the agent.                                 |
+| `.claude-plugin/`          | the Claude Code marketplace `fleet`, listing the plugin the claude-code pack carries. Not a pack.    |
 | `ci/`                      | the checks run on the packs, against a pinned fleet. Not a pack.                                     |
 | `versions.toml`            | the fleet commit CI builds and checks the packs against.                                             |
 | `.github/workflows/ci.yml` | CI: installs the pins and runs the checks under `ci/`, on every push and pull request.               |

@@ -1,0 +1,78 @@
+#!/bin/sh
+# The plugin's entry point. This directory is on the Bash tool's PATH in an
+# enabled session, appended last, and a hook reaches the same file through
+# CLAUDE_PLUGIN_ROOT, because a hook's PATH does not carry it (the pack's
+# lessons D5, measured on Claude Code 2.1.280).
+#
+# FLEET_BIN IS THE ONE SOURCE. It names the fleet binary by an absolute path:
+# fleet sets it on every seat it launches, naming its own executable, and a
+# person's own session sets it once in their shell profile (the adapter's
+# README). The shim never searches: a plugin copied into Claude Code's cache
+# has no checkout around it, and a bare `fleet` on PATH would be whichever one
+# the session happened to find (fleet-78r, ruled 2026-09-26: no PATH
+# fallback).
+#
+# WITH NO BINARY TO RUN, THE CALLER DECIDES THE EXIT. A pre-tool hook blocks
+# only on 2 and reads every other non-zero exit as a hook that failed and let
+# the call through, so a guard that exited 127 here would switch itself off
+# with one line nobody reads. A guard therefore exits 2 and blocks the call it
+# was asked about. The session-start line must never block — a session that
+# does not come up cannot be told why — so prime exits 127, which the agent
+# shows the person and goes on from. Every other verb, `guard --check`
+# included, is a command that could not run: 127, and no word of a block.
+set -u
+
+# The line a person reads the block against: `fleet guard --adapter claude-code`.
+invocation="fleet $*"
+mode=command
+case "${1-}" in
+guard)
+	mode=guard
+	for arg in "$@"; do
+		if [ "${arg}" = --check ]; then
+			mode=command
+		fi
+	done
+	;;
+prime)
+	mode=prime
+	;;
+esac
+
+# no_binary <what is missing>: say what is missing and how to supply it, in the
+# words this invocation's caller reads, and exit with the status it acts on.
+no_binary() {
+	case "${mode}" in
+	guard)
+		echo "fleet: this Bash command is blocked: the \`${invocation}\` hook has no fleet binary to judge it with, and a guard that cannot judge refuses rather than letting a command run unjudged." >&2
+		echo "fleet: $1." >&2
+		echo "fleet: every Bash command in this session is blocked until one is found: start the session with FLEET_BIN set to the absolute path of a fleet binary, as fleet does for every seat it launches." >&2
+		exit 2
+		;;
+	prime)
+		echo "fleet: this session starts without its fleet context: the session-start hook has no fleet binary to run, and every Bash command in the session will be blocked until one is found." >&2
+		echo "fleet: $1." >&2
+		echo "fleet: to supply one, start the session with FLEET_BIN set to the absolute path of a fleet binary, as fleet does for every seat it launches." >&2
+		exit 127
+		;;
+	*)
+		echo "fleet: $1." >&2
+		echo "fleet: to supply one, set FLEET_BIN to the absolute path of a fleet binary." >&2
+		exit 127
+		;;
+	esac
+}
+
+if [ -z "${FLEET_BIN-}" ]; then
+	no_binary "FLEET_BIN is not set, and it is the one place this plugin looks for fleet"
+fi
+case "${FLEET_BIN}" in
+/*) ;;
+*)
+	no_binary "FLEET_BIN names \`${FLEET_BIN}\`, which is not an absolute path"
+	;;
+esac
+if [ ! -f "${FLEET_BIN}" ] || [ ! -x "${FLEET_BIN}" ]; then
+	no_binary "FLEET_BIN names \`${FLEET_BIN}\`, which is not an executable file"
+fi
+exec "${FLEET_BIN}" "$@"

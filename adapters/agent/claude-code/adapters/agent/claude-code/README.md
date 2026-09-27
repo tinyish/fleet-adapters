@@ -17,10 +17,9 @@ The pack is `adapters/agent/claude-code/` in this repository, and the paths
 below are the pack's. This file sits in the adapter's own directory because a
 pack's top level holds `pack.toml` and the eight slots and nothing else.
 
-**Status:** the pack answers all six verbs. `launch` loads the pack's own plugin
-directory, `plugin/` beside `main.ts`, which the row that carries fleet's Claude
-Code plugin fills; until then the directory is not there, and Claude Code
-2.1.280 starts all the same. That row also renders the launch's permissions.
+**Status:** the pack answers all six verbs, and carries fleet's Claude Code
+plugin, `plugin/` beside `main.ts`, which `launch` and `resume` load into every
+seat (see [The plugin](#the-plugin)).
 
 The pack also carries two doctor checks, `doctor/claude-code-version/` and
 `doctor/isolation-pair/`, which `fleet doctor` lists from the installed pack.
@@ -113,7 +112,7 @@ interactive Claude Code:
   `unattended` is `dontAsk`. A launch or resume with any other posture is
   refused, exit 1, `unsupported`, naming the word and the three.
 - `<plugin>` is the pack's own `plugin/` directory, beside `main.ts`. A request
-  never names it.
+  never names it, and no fleet setting does.
 - The model and the posture are always named: on Claude Code 2.1.280 a start
   that names neither comes up on Opus 5.5, in auto mode.
 
@@ -138,9 +137,151 @@ into any file already there:
 - `projects.<worktree>.hasTrustDialogAccepted: true`, for the seat's own
   worktree, resolved through any symlink, and for no other directory.
 
+**A spawned seat's permissions are rendered** into its worktree's
+`.claude/settings.local.json` before `launch` answers, because Claude Code reads
+that file once, as the session comes up (see
+[The permissions](#the-permissions)). A file already standing there, one a
+project tracks on its trunk, is merged into rather than replaced. A standing
+file that cannot be read, or is not JSON the rules can be folded into, is could
+not tell, exit 3, and so is a write that does not read back; a
+`permissions.commands` entry that is not one command word is exit 2, naming it.
+Both refusals come before anything is written.
+
 A seat without a `config_dir` is one fleet did not make the worktree of, so
-`launch` writes nothing for it: no seed, and no trust. Every write goes through
+`launch` writes nothing for it: no seed, no trust and no permission rules,
+whatever permissions the request carries. Every write goes through
 `writeInside`, and a config dir that is itself a symlink is refused, exit 3.
+
+## The permissions
+
+What a spawned seat runs without asking is fleet's to say and Claude Code's to
+enforce. `lib/permissions.ts` holds fleet's part in fleet's words, the lists the
+seat's rules are rendered from:
+
+- **Commands allowed**, each one command word matched as the first of the
+  command line: `bd`, `fleet`, `git`, `sh`, `bash`, and the plain read and file
+  verbs, `echo` through `false`.
+- **Command lines refused**, each matched as a prefix, where `*` stands for any
+  run of characters: `git push origin HEAD:main`, `git push origin main`,
+  `git push --force`, `git push -f` followed by a space, and
+  `git push * --delete`.
+- **The worktree**, the one path the seat writes.
+
+The request adds the rest in the same words (fleet's
+[docs/agent.md](https://github.com/bembot90/tinyfleet/blob/main/docs/agent.md),
+Permissions): `commands`, the project's `[permissions] tool_commands`, and
+`touched`, the builder's checks, the one command line its dispatch was handed.
+
+Rendered, the seat's `permissions.allow` is `Bash(<word>:*)` for each allowed
+command, in that order, then `Bash(<touched>:*)` where the request carries a
+`touched` that is not blank, then `Edit(/<worktree>/**)`, then `Bash(<word>:*)`
+for each of the request's `commands` not already there, in the order given.
+`permissions.deny` is the four Claude Code tools a seat is denied,
+`AskUserQuestion`, `EnterPlanMode`, `ExitPlanMode` and `mcp__*__request_access`,
+then `Bash(<line>*)` for each refused line. Where the worktree already holds the
+file, its own keys are kept, its rules stand first in their order, and a rule it
+already carries is not added twice.
+
+These are the rules fleet's own spawn rendered from its layers' permissions
+template until this pack carried them. `fixtures/permissions/<case>.json` is
+that render's document for the worktree `/work/lanes/builder-e5f60718`, recorded
+by running fleet's in-process render at tinyfleet `dbc7908`, and
+`test/permissions_test.ts` holds this render equal to each as JSON:
+
+| Case            | `commands`            | `touched`                   |
+| --------------- | --------------------- | --------------------------- |
+| `touched`       | none                  | `make check`                |
+| `untouched`     | none                  | none                        |
+| `quoted`        | none                  | `make check ARGS="-p core"` |
+| `tool-commands` | `make`, `cargo`, `sh` | `make check`                |
+
+## The plugin
+
+`plugin/` is fleet's Claude Code plugin. `launch` and `resume` name it with
+`--plugin-dir` on every seat, so a seat comes up with fleet's guards, its
+session prime, the `fleet` command on its Bash tool's `PATH`, and the tiny
+pack's rituals, `/wake` among them.
+
+| Path                         | What it is                                                                                                |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `.claude-plugin/plugin.json` | The manifest: the plugin `fleet`, at this pack's version.                                                 |
+| `hooks/hooks.json`           | Two hooks, each run through the plugin's own `bin/fleet`.                                                 |
+| `bin/fleet`                  | The shim every hook runs, and the `fleet` a seat's Bash tool finds: it runs the binary `FLEET_BIN` names. |
+| `skills/version/`            | The plugin's own probe: it runs `fleet --version` and reports what it printed.                            |
+| `skills/<name>/`             | The tiny pack's twelve skills, `adopt` through `wake`, copied from this repository's `tiny/skills/`.      |
+
+### The hooks
+
+- **Before every Bash command**, `fleet guard --adapter claude-code`. With no
+  class named, `fleet guard` runs every guard class the fleet's pack layers
+  declare, in class order, and prints the first refusal. The refusal is Claude
+  Code's pre-tool decision, one JSON object on standard output, in the shape
+  `adapter.toml`'s `[hook]` declares:
+  `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"<the reason>"}}`.
+  A command no class refuses prints nothing, and Claude Code goes on to its own
+  permission rules.
+- **When a session starts**, `fleet prime`, whose output Claude Code hands the
+  session as context.
+
+Each hook is addressed through `${CLAUDE_PLUGIN_ROOT}`: measured on Claude Code
+2.1.280, a hook's environment carries that variable and no `bin/` of the plugin
+on its `PATH`. The Bash tool's `PATH` does carry the plugin's `bin/`, appended
+last, so a `fleet` earlier on a seat's `PATH` is the one its commands run.
+
+A guard fails closed. On a machine whose pack layers do not resolve, one where
+neither `fleet create` nor `fleet start` has written the defaults,
+`fleet guard --adapter claude-code` exits 2, which Claude Code reads as a block,
+so every Bash command in the session is refused until the fleet is set up.
+
+### Which fleet the plugin runs
+
+`bin/fleet` runs the binary `FLEET_BIN` names, and nothing else: it never looks
+on `PATH` or for a build. fleet sets `FLEET_BIN` to its own executable on every
+seat it launches. A session of your own that loads the plugin needs it set once,
+in your shell profile:
+
+```sh
+export FLEET_BIN=/absolute/path/to/fleet
+```
+
+Where `FLEET_BIN` is not set, is not an absolute path, or names no executable
+file, the shim says so on standard error and exits by who asked:
+
+| Caller                                 | Exit | What Claude Code does                                                |
+| -------------------------------------- | ---- | -------------------------------------------------------------------- |
+| the guard hook                         | 2    | blocks the Bash command, with the shim's words as the reason         |
+| the session-start hook, `fleet prime`  | 127  | starts the session without fleet's context, showing the shim's words |
+| any other `fleet`, `guard --check` too | 127  | reports a command that could not run, with no word of a block        |
+
+### Loading it in a session of your own
+
+The repository's root carries `.claude-plugin/marketplace.json`, a marketplace
+named `fleet` that lists this one plugin. With `FLEET_BIN` set:
+
+```sh
+claude plugin marketplace add https://github.com/bembot90/fleet-packs
+claude plugin install fleet@fleet
+```
+
+A local checkout of fleet-packs is a marketplace too, by its path. For one
+session only:
+`claude --plugin-dir <fleet-packs>/adapters/agent/claude-code/adapters/agent/claude-code/plugin`.
+
+### The skills are copies
+
+The tiny pack's skills are copied into `plugin/skills/`, not linked. Measured on
+2026-09-26, on Claude Code 2.1.280 and fleet at tinyfleet `dbc7908`: a relative
+link from `plugin/skills/` to `tiny/skills/` survives `claude plugin install`
+from a checkout, whose copy into the plugin cache follows it, but not
+`fleet pack add`, which installs this pack's directory alone under the machine's
+`packs/`, where a link climbing out of it resolves nowhere; and that directory
+is the plugin every seat is launched with. So the copies are committed, and
+`test/plugin_test.ts` holds each to `tiny/skills/` byte for byte. After changing
+a skill in `tiny/`, copy it again:
+
+```sh
+deno task skills
+```
 
 ## What `resume` answers
 
@@ -321,9 +462,18 @@ FLEET_BIN=/path/to/fleet deno task test
 
 With `FLEET_BIN` set, one arm runs `fleet guard` over sample payloads with this
 adapter's directory and with no flag, and holds the two refusals to the same
-bytes; without it that arm is ignored. No arm runs Claude Code: `context`'s arms
+bytes, and two run the plugin's shim and its guard line over that binary;
+without it those arms are ignored. No arm runs Claude Code: `context`'s arms
 read the recorded transcripts, `read`'s replay the recorded listings through
 `fixtures/read/claude`, and every other claude is a script the arm writes.
+
+The plugin, and the marketplace at the repository's root, validate with Claude
+Code itself:
+
+```sh
+claude plugin validate plugin
+claude plugin validate ../../../../../..
+```
 
 `fleet agent check` over the adapter, offline, and against Claude Code itself. A
 `launch` seeds its scratch config dir from `~/.claude.json`, so the offline

@@ -5,12 +5,14 @@
   },
   "tasks": {
     "types": "deno run --allow-run --allow-env=FLEET_BIN --allow-write=contract.json,contract.d.ts scripts/types.ts && deno fmt contract.d.ts",
-    "test": "deno test --allow-run --allow-read --allow-write --allow-env"
+    "test": "deno test --allow-run --allow-read --allow-write --allow-env",
+    "skills": "deno run --allow-read --allow-write scripts/skills.ts"
   },
   "fmt": {
     "exclude": [
       "contract.json",
-      "fixtures"
+      "fixtures",
+      "plugin/skills"
     ]
   },
   "lint": {

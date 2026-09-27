@@ -1,7 +1,8 @@
 // verbs/launch.ts: a seat's session as the pane's own command — the argv and
 // the environment core sets exactly (D1, E2) — and the seed of a spawned
-// seat's config dir, written before the answer. Every claude here is a
-// script, and none is run: launch starts nothing.
+// seat's config dir and the rendering of its permissions into its worktree,
+// both written before the answer. Every claude here is a script, and none is
+// run: launch starts nothing.
 
 import {
   assert,
@@ -10,6 +11,7 @@ import {
   assertStringIncludes,
 } from "@std/assert";
 import { CouldNotTell, Refused } from "../lib/answer.ts";
+import { LOCAL_SETTINGS, renderPermissions } from "../lib/permissions.ts";
 import { pluginDir } from "../lib/plugin.ts";
 import { STATE_FILE } from "../lib/seed.ts";
 import { launchWith } from "../verbs/launch.ts";
@@ -191,9 +193,13 @@ Deno.test("launch: a spawned seat's config dir is seeded with onboarding and its
   });
   assertEquals((await Deno.stat(path)).mode! & 0o777, 0o600);
   assertEquals(
-    [...Deno.readDirSync(s.worktree)],
-    [],
-    "nothing lands in the worktree",
+    [...Deno.readDirSync(s.worktree)].map((entry) => entry.name),
+    [".claude"],
+    "the worktree holds the rules and nothing of the seed",
+  );
+  assertEquals(
+    [...Deno.readDirSync(`${s.worktree}/.claude`)].map((entry) => entry.name),
+    ["settings.local.json"],
   );
 });
 
@@ -284,4 +290,103 @@ Deno.test("main.ts launch: answers exit 0, and refuses acceptEdits exit 1 naming
         "Claude Code takes no posture `acceptEdits`: its postures are ask, auto and unattended",
     },
   });
+});
+
+/**
+ * A spawned seat's launch renders the request's permissions into the
+ * worktree's own settings file before it answers (E8; lib/permissions.ts),
+ * where Claude Code reads it as the session comes up.
+ */
+Deno.test("launch: a spawned seat's permissions are rendered into its worktree's settings", async () => {
+  await using s = await scratch();
+  const permissions = { commands: ["cargo"], touched: "make check" };
+  await launchWith(env({ HOME: s.home }))(
+    aLaunch({ worktree: s.worktree, config_dir: s.configDir, permissions }),
+  );
+  const path = `${s.worktree}/${LOCAL_SETTINGS}`;
+  assertEquals(
+    await Deno.readTextFile(path),
+    renderPermissions(permissions, s.worktree),
+  );
+  const allow = JSON.parse(await Deno.readTextFile(path)).permissions.allow;
+  assert(allow.includes("Bash(make check:*)"), allow.join(" "));
+  assert(allow.includes(`Edit(/${s.worktree}/**)`), allow.join(" "));
+  assert(allow.includes("Bash(cargo:*)"), allow.join(" "));
+});
+
+/** A project's own tracked file is merged into, and keeps its own rules. */
+Deno.test("launch: a settings file standing in the worktree is merged into, never replaced", async () => {
+  await using s = await scratch();
+  await Deno.mkdir(`${s.worktree}/.claude`);
+  const path = `${s.worktree}/${LOCAL_SETTINGS}`;
+  await Deno.writeTextFile(
+    path,
+    '{"model": "kept", "permissions": {"deny": ["Bash(rm -rf /*)"]}}\n',
+  );
+  await launchWith(env({ HOME: s.home }))(
+    aLaunch({ worktree: s.worktree, config_dir: s.configDir }),
+  );
+  const doc = JSON.parse(await Deno.readTextFile(path));
+  assertEquals(doc.model, "kept");
+  assertEquals(doc.permissions.deny[0], "Bash(rm -rf /*)");
+  assert(doc.permissions.deny.includes("Bash(git push --force*)"));
+});
+
+/**
+ * A standing file the rules cannot fold into refuses the launch BEFORE any
+ * write: the config dir is not seeded and the file is not touched.
+ */
+Deno.test("launch: a standing settings file that is not JSON refuses the launch, and nothing is written", async () => {
+  await using s = await scratch();
+  await Deno.mkdir(`${s.worktree}/.claude`);
+  await Deno.writeTextFile(`${s.worktree}/${LOCAL_SETTINGS}`, "{not json");
+  const before = await tree(s.top);
+  const error = await assertRejects(
+    () =>
+      launchWith(env({ HOME: s.home }))(
+        aLaunch({ worktree: s.worktree, config_dir: s.configDir }),
+      ),
+    CouldNotTell,
+  );
+  assertStringIncludes(error.message, "nothing was written over");
+  assertEquals(await tree(s.top), before);
+});
+
+/** A named seat's worktree is a person's: no rules, whatever it was handed. */
+Deno.test("launch: a named seat's worktree gets no settings file, even handed permissions", async () => {
+  await using s = await scratch();
+  const before = await tree(s.top);
+  await launchWith(env({ HOME: s.home }))(
+    aLaunch({
+      worktree: s.worktree,
+      config_dir: null,
+      permissions: { commands: ["cargo"], touched: "make check" },
+    }),
+  );
+  assertEquals(await tree(s.top), before);
+});
+
+/** A command that is not one word is the request's defect: exit 2, nothing written. */
+Deno.test("main.ts launch: a permissions command that is not one word is exit 2, and nothing is written", async () => {
+  await using s = await scratch();
+  // Not s.top whole: a call under HOME=s.home leaves Deno's own cache there.
+  const before = [await tree(`${s.top}/seat`), await tree(s.worktree)];
+  const refused = await call(
+    "launch",
+    JSON.stringify(
+      aLaunch({
+        worktree: s.worktree,
+        config_dir: s.configDir,
+        permissions: { commands: ["make check"] },
+      }),
+    ),
+    { HOME: s.home, CLAUDE_CONFIG_DIR: "", FLEET_CLAUDE_BIN: s.claude },
+  );
+  assertEquals(refused.exit, 2, refused.stderr);
+  assertEquals(refused.answer, undefined);
+  assertStringIncludes(
+    refused.stderr,
+    "`make check` is not one command word",
+  );
+  assertEquals([await tree(`${s.top}/seat`), await tree(s.worktree)], before);
 });
