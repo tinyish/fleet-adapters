@@ -18,8 +18,11 @@
 //   measured        core/src/supported.rs:33 PINNED_CLAUDE_CODE. B10 and D8,
 //                   which launch rests on, held on this version (fleet-031,
 //                   E14), and `fleet agent check --live` passed through this
-//                   pack on it (fleet-jymr.2); fleet-jymr.6 carries the
-//                   measurements beside their fixtures. The doctor check
+//                   pack on it (fleet-jymr.2); LESSONS.md carries the
+//                   measurements beside their fixtures, each entry's own
+//                   Version line naming this release, and
+//                   test/lessons_test.ts holds every entry to a line for
+//                   each release listed here (fleet-jymr.6). The doctor check
 //                   doctor/claude-code-version holds a copy of the last
 //                   entry (test/doctor_test.ts).
 //   posture_models  policy.rs 56-57 DEFAULT_AUTO_CAPABLE_MODELS, by prefix:

@@ -8,8 +8,10 @@
 //
 // The arms after the fixtures are the row's acceptance: seats across three
 // config dirs cost three listings in one process, one dir's failing listing
-// leaves the others read, and the reading of one row — status and
-// waitingFor, the logged-out first turn, the trust question — arm by arm.
+// leaves the others read, and the reading of one row — status, the
+// logged-out first turn, the trust question — arm by arm. B8's waitingFor,
+// keyed on presence, is test/lessons/waiting_for_names_the_block.test.ts
+// (fleet-jymr.6).
 
 import { assert, assertEquals } from "@std/assert";
 import type { SeatRef } from "../contract.d.ts";
@@ -274,38 +276,6 @@ Deno.test("status: idle, busy and waiting are typed activities", async () => {
     session_id: RA,
     cause: "the listing says waiting and names no cause",
   });
-});
-
-/**
- * lessons B8 — waitingFor is keyed on PRESENCE: `permission prompt` is
- * blocked on permission; any other value is still blocked, on nothing named,
- * whatever the status beside it; absent is the control.
- */
-Deno.test("waitingFor names the block, keyed on presence", async () => {
-  assertEquals(
-    await read({ status: "waiting", waitingFor: "permission prompt" }),
-    {
-      seat: SEAT,
-      activity: "blocked",
-      blocked_on: "permission",
-      evidence: "typed",
-      session_id: RA,
-    },
-  );
-  for (const status of ["waiting", "busy", "idle"]) {
-    assertEquals(
-      await read({ status, waitingFor: "a cause nobody has enumerated" }),
-      {
-        seat: SEAT,
-        activity: "blocked",
-        evidence: "typed",
-        session_id: RA,
-        cause: "the agent waits for `a cause nobody has enumerated`",
-      },
-      status,
-    );
-  }
-  assertEquals((await read({ status: "busy" })).activity, "busy");
 });
 
 /** A status no rule reads, or none at all, is unknown, saying which. */

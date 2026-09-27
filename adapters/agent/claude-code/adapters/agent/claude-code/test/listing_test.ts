@@ -1,12 +1,14 @@
 // lib/listing.ts: one `claude agents --json --all` per distinct config dir,
 // parsed into the adapter's own row, and a seat's row found among them. The
-// arms restate controller/tests/observe.rs's lessons at tinyfleet 753fdde —
-// the_roster_is_one_command (B1), the_roster_read_can_go_silently_dead (B4),
-// cwd_names_a_seat_and_proves_nothing (B5, as the pack reads it now: by
-// session id, else by pid, never by cwd) — and the per-dir arms
+// arms restating B1's one command and B4's silent read are under
+// test/lessons/ with the other lessons the pack keeps (fleet-jymr.6); the
+// matching arms here read a row as the pack reads it now (by session id,
+// else by pid, never by cwd: B5's arm is test/lessons/'s), and the per-dir
+// arms restate
 // a_transient_row_is_seen_through_its_own_directory_and_unseen_through_the_fleets
-// and a_per_row_listing_that_cannot_be_read_leaves_that_row_unknown_and_the_rest_decided,
-// over the listings recorded on Claude Code 2.1.280 under fixtures/read/.
+// and a_per_row_listing_that_cannot_be_read_leaves_that_row_unknown_and_the_rest_decided
+// at tinyfleet 753fdde, over the listings recorded on Claude Code 2.1.280
+// under fixtures/read/.
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
@@ -66,53 +68,6 @@ Deno.test("the recorded rows parse into the adapter's own row", () => {
     startedAt: 1790417738915,
   }]);
   assertEquals(rows(parseListing(recorded("two-rows-one-worktree"))).length, 2);
-});
-
-/**
- * B1: the reader tolerates fields it does not know, and field presence is
- * kind-dependent, so a background row and an interactive one parse in one
- * listing.
- */
-Deno.test("the roster is one command, and unknown fields are nothing", () => {
-  assertEquals(rows(parseListing(recorded("unknown-field"))), [{
-    sessionId: RA,
-    kind: "interactive",
-    pid: 84311,
-    status: "idle",
-    startedAt: 1790417738915,
-  }]);
-  const mixed = rows(parseListing(
-    `[{"id":"aa","sessionId":"aa","cwd":"/wt/b1","kind":"background","pid":1,
-       "status":"idle","state":"running","name":"orla","startedAt":10,
-       "someFieldNobodyHasSeen":"harmless"},
-      {"sessionId":"bb","kind":"interactive"}]`,
-  ));
-  assertEquals(mixed, [
-    {
-      sessionId: "aa",
-      kind: "background",
-      pid: 1,
-      status: "idle",
-      startedAt: 10,
-    },
-    { sessionId: "bb", kind: "interactive" },
-  ]);
-});
-
-/**
- * B4: zero bytes with a success status is UNREADABLE, never a reading of
- * zero; the control is an empty array, a listing that answered.
- */
-Deno.test("the roster read can go silently dead", () => {
-  assertEquals(
-    cause(parseListing(recorded("zero-bytes"))),
-    "the listing answered with zero bytes and a success status",
-  );
-  assertEquals(
-    cause(parseListing(" \n")),
-    "the listing answered with zero bytes and a success status",
-  );
-  assertEquals(rows(parseListing(recorded("empty-listing"))), []);
 });
 
 /**

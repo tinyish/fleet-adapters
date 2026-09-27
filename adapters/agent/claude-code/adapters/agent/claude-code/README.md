@@ -422,6 +422,19 @@ changed.
 | `zero-bytes`            | Derived: zero bytes and exit 0, the unreadable listing of lessons B4, seen on a release nobody recorded, which cannot be made on demand.                                            |
 | `one-dir-fails`         | Three config dirs: the `two-rows-one-worktree` listing, a second dir's own recorded session, and a derived listing that exits 1. A seat is seen only through its own dir's listing. |
 
+## The lessons
+
+`LESSONS.md` is what this adapter knows about Claude Code, measured rather than
+read: the entries its behaviour rests on, each carrying the release it was
+measured on, 2.1.280 among them, and the test that holds the adapter to it,
+`test/lessons/<slug>.test.ts`. They moved here from fleet's own
+`brain/lessons/claude-code.md`, which keeps the daemon-era entries fleet retired
+and the facts about the host and fleet's own loop, under the same ids. The table
+at the foot of `LESSONS.md` names each test and its file, and
+`test/lessons_test.ts` holds the two in step and every entry to a Version line
+for each release `measured` names. The arms of D5 and D6 read the plugin under
+`plugin/` and are ignored where it is not there.
+
 ## The doctor checks
 
 `fleet doctor` lists both from the installed pack, in place of the copies
@@ -465,7 +478,8 @@ adapter's directory and with no flag, and holds the two refusals to the same
 bytes, and two run the plugin's shim and its guard line over that binary;
 without it those arms are ignored. No arm runs Claude Code: `context`'s arms
 read the recorded transcripts, `read`'s replay the recorded listings through
-`fixtures/read/claude`, and every other claude is a script the arm writes.
+`fixtures/read/claude` (the lessons arms replay listings they make up through it
+too), and every other claude is a script the arm writes.
 
 The plugin, and the marketplace at the repository's root, validate with Claude
 Code itself:
