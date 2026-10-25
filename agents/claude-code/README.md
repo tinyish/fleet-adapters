@@ -8,6 +8,11 @@ and 2 for a verb it does not know.
 Built on fleet-adapter-sdk's kit; its conformance checks run in
 `tests/conformance.rs`.
 
+Its version is the Claude Code version it is measured against, 2.1.285,
+with `-<n>` for a fix of its own. Released by the tag
+`claude-code-v<version>`; tinyfleet fetches it when a config names
+`claude-code@<version>`.
+
 ## launch
 
 Answers with `claude` by its absolute path on the `PATH`, then
@@ -37,3 +42,8 @@ each read it from a different directory.
 Measured on Claude Code 2.1.285, 2026-10-23. A directory Claude has not been
 told to trust shows its trust dialog and writes no session file, so such a
 session reads `starting` until the dialog is answered.
+
+## protocol
+
+Answers `{"protocol":1}`: agent protocol 1, the one fleet-adapter-sdk
+0.2.0 speaks.

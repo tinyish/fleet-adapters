@@ -1,0 +1,108 @@
+# The release workflow: pushing a tag <name>-v<version> releases that
+# adapter (the version is its agent's x.y.z, with -<n> for a fix of its
+# own). It checks the tag against the adapter's crate version, runs the
+# adapter's tests (its conformance checks included), builds it for the four
+# targets fleet ships, and creates the GitHub release <name>-v<version> with
+# fleet-<name>-<target> for each target and manifest.json (name, version,
+# protocol, each target's SHA-256), which fleet fetches when a config names
+# <name>@<version>. An existing release is never overwritten. Any tag with
+# `-v` in it starts the workflow, so a mistyped one (claude-code-v0.2) is
+# refused at check with why, rather than ignored.
+
+name: release
+
+on:
+  push:
+    tags: ["*-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.tag.outputs.name }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tag
+        name: Is the tag an adapter's, at its crate's version?
+        env:
+          TAG: ${{ github.ref_name }}
+        run: .github/scripts/tag.sh "$TAG" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (the version rust-toolchain.toml pins)
+        run: rustup toolchain install
+      - name: Its tests, the conformance checks included
+        run: cargo test --locked -p fleet-${{ needs.check.outputs.name }}
+
+  build:
+    needs: [check, test]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: aarch64-apple-darwin, os: macos-14, zig: false }
+          - { target: x86_64-apple-darwin, os: macos-14, zig: false }
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-latest, zig: true }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-latest, zig: true }
+    runs-on: ${{ matrix.os }}
+    env:
+      BIN: fleet-${{ needs.check.outputs.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (the version rust-toolchain.toml pins)
+        run: |
+          rustup toolchain install
+          rustup target add ${{ matrix.target }}
+      - uses: actions/setup-python@v5
+        if: matrix.zig
+        with:
+          python-version: "3.12"
+      - name: Zig, for static musl builds
+        if: matrix.zig
+        run: |
+          pip install ziglang
+          cargo install --locked cargo-zigbuild
+      - name: Build
+        run: |
+          if [ "${{ matrix.zig }}" = true ]; then
+            cargo zigbuild --release --locked --target ${{ matrix.target }} -p "$BIN"
+          else
+            cargo build --release --locked --target ${{ matrix.target }} -p "$BIN"
+          fi
+          cp "target/${{ matrix.target }}/release/$BIN" "$BIN-${{ matrix.target }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: fleet-${{ needs.check.outputs.name }}-${{ matrix.target }}
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: The manifest, then the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          NAME: ${{ needs.check.outputs.name }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          chmod +x dist/*
+          .github/scripts/manifest.sh "$NAME" "$VERSION" dist > manifest.json
+          mv manifest.json dist/
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes "fleet-$NAME $VERSION, agent protocol $(jq .protocol dist/manifest.json)" dist/*

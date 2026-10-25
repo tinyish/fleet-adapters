@@ -1,6 +1,8 @@
 [package]
 name = "fleet-claude-code"
-version.workspace = true
+# The Claude Code version it is measured against, with -<n> for a fix of
+# its own; released by the tag claude-code-v<version>.
+version = "2.1.285"
 edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true

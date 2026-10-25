@@ -4,8 +4,8 @@ version = 4
 
 [[package]]
 name = "fleet-adapter-sdk"
-version = "0.1.0"
-source = "git+https://github.com/tinyish/fleet?tag=adapter-sdk-v0.1.0#7ced2f7e88e430691e1d735ad1a0196fa0f42d6c"
+version = "0.2.0"
+source = "git+https://github.com/tinyish/fleet?tag=adapter-sdk-v0.2.0#e2a2c15fbcb9152d7cad00a9df2f7afdb231b786"
 dependencies = [
  "serde",
  "serde_json",
@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-claude-code"
-version = "0.0.0"
+version = "2.1.285"
 dependencies = [
  "fleet-adapter-sdk",
  "serde",
