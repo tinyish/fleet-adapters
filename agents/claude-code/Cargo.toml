@@ -1,0 +1,18 @@
+[package]
+name = "fleet-claude-code"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "fleet-claude-code"
+path = "src/main.rs"
+
+[dependencies]
+fleet-adapter-sdk.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
